@@ -1,0 +1,1 @@
+Strictly follow the current architecture and design patterns of the existing codebase. Ensure that any new features or modifications are consistent with the established coding standards and practices.
