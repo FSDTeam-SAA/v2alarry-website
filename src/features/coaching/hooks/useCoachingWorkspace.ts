@@ -1,179 +1,105 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
-import { initialCoachingSessions } from "../coaching-data";
-import type { CoachingMessage, CoachingSession } from "../types";
+import { getConversationMessages, streamChat } from "../api/chat.api";
+import type { CoachingMessage } from "../types";
+import {
+  chatKeys,
+  useConversationMessages,
+  useConversations,
+  useDeleteConversation,
+} from "./useChat";
 
-const storageKey = "leader-coach-sessions";
-
-function createId(prefix: string) {
+function createTemporaryId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function createSessionTitle(message: string) {
+function createConversationTitle(message: string) {
   const words = message.trim().split(/\s+/).slice(0, 5).join(" ");
-
-  return words
-    ? `${words}${message.trim().split(/\s+/).length > 5 ? "…" : ""}`
-    : "New coaching session";
+  return words || "New coaching session";
 }
 
-function createCoachingReply(message: string) {
-  const lowerCaseMessage = message.toLowerCase();
-
-  if (lowerCaseMessage.includes("decision")) {
-    return "Let’s make the decision more concrete. What are the two or three options you are weighing, and what matters most in choosing between them?";
-  }
-
-  if (lowerCaseMessage.includes("team") || lowerCaseMessage.includes("trust")) {
-    return "Trust grows through clear expectations and reliable follow-through. What is one behavior you could model for the team this week?";
-  }
-
-  if (
-    lowerCaseMessage.includes("conversation") ||
-    lowerCaseMessage.includes("feedback")
-  ) {
-    return "Before the conversation, name the outcome you want and the one thing you need to say plainly. What would that sound like?";
-  }
-
-  return "That sounds worth exploring. What feels most important about this situation, and what would a useful next step look like?";
-}
-
-function isCoachingMessage(value: unknown): value is CoachingMessage {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const message = value as Record<string, unknown>;
-
-  return (
-    typeof message.id === "string" &&
-    typeof message.content === "string" &&
-    (message.role === "assistant" || message.role === "user") &&
-    (message.attachments === undefined ||
-      (Array.isArray(message.attachments) &&
-        message.attachments.every(
-          (attachment) => typeof attachment === "string",
-        )))
-  );
-}
-
-function isCoachingSession(value: unknown): value is CoachingSession {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const session = value as Record<string, unknown>;
-
-  return (
-    typeof session.id === "string" &&
-    typeof session.title === "string" &&
-    typeof session.dateLabel === "string" &&
-    Array.isArray(session.messages) &&
-    session.messages.every(isCoachingMessage)
-  );
-}
-
-function readStoredSessions() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    const value = window.localStorage.getItem(storageKey);
-
-    if (!value) {
-      return null;
-    }
-
-    const parsed: unknown = JSON.parse(value);
-
-    return Array.isArray(parsed) && parsed.every(isCoachingSession)
-      ? parsed
-      : null;
-  } catch {
-    return null;
-  }
+function getErrorMessage(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : "Unable to complete the response";
 }
 
 export function useCoachingWorkspace() {
-  const [sessions, setSessions] = useState<CoachingSession[]>(
-    initialCoachingSessions,
-  );
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const conversationsQuery = useConversations();
+  const [activeConversationId, setActiveConversationId] = useState<
+    string | null
+  >(null);
+  const messagesQuery = useConversationMessages(activeConversationId);
+  const deleteConversation = useDeleteConversation();
   const [draft, setDraft] = useState("");
-  const [attachments, setAttachments] = useState<string[]>([]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [pendingReplyCounts, setPendingReplyCounts] = useState<
-    Record<string, number>
-  >({});
-  const [hasLoadedSessions, setHasLoadedSessions] = useState(false);
-  const replyTimeouts = useRef<number[]>([]);
+  const [optimisticMessages, setOptimisticMessages] = useState<
+    CoachingMessage[]
+  >([]);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const streamController = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    const loadTimeout = window.setTimeout(() => {
-      const storedSessions = readStoredSessions();
+  useEffect(() => () => streamController.current?.abort(), []);
 
-      if (storedSessions) {
-        setSessions(storedSessions);
-      }
-
-      setHasLoadedSessions(true);
-    });
-
-    return () => window.clearTimeout(loadTimeout);
-  }, []);
-
-  useEffect(() => {
-    if (hasLoadedSessions) {
-      window.localStorage.setItem(storageKey, JSON.stringify(sessions));
-    }
-  }, [hasLoadedSessions, sessions]);
-
-  useEffect(() => {
-    const timeouts = replyTimeouts.current;
-
-    return () => {
-      timeouts.forEach((timeout) => window.clearTimeout(timeout));
-    };
-  }, []);
-
-  const activeSession = useMemo(
-    () => sessions.find((session) => session.id === activeSessionId) ?? null,
-    [activeSessionId, sessions],
+  const activeConversation = useMemo(
+    () =>
+      conversationsQuery.data?.find(
+        (conversation) => conversation.id === activeConversationId,
+      ) ?? null,
+    [activeConversationId, conversationsQuery.data],
   );
 
-  const filteredSessions = useMemo(() => {
+  const messages = useMemo(
+    () => [...(messagesQuery.data ?? []), ...optimisticMessages],
+    [messagesQuery.data, optimisticMessages],
+  );
+
+  const filteredConversations = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
+    if (!query) return conversationsQuery.data ?? [];
 
-    if (!query) {
-      return sessions;
-    }
+    return (conversationsQuery.data ?? []).filter((conversation) => {
+      const loadedMessages =
+        conversation.id === activeConversationId
+          ? messages
+          : queryClient.getQueryData<CoachingMessage[]>(
+              chatKeys.messages(conversation.id),
+            );
+      const messageText =
+        loadedMessages?.map((message) => message.content).join(" ") ?? "";
 
-    return sessions.filter((session) => {
-      const messageText = session.messages
-        .map((message) => message.content)
-        .join(" ");
-
-      return `${session.title} ${messageText}`
+      return `${conversation.title} ${messageText}`
         .toLocaleLowerCase()
         .includes(query);
     });
-  }, [searchQuery, sessions]);
+  }, [
+    activeConversationId,
+    conversationsQuery.data,
+    messages,
+    queryClient,
+    searchQuery,
+  ]);
 
   function createNewSession() {
-    setActiveSessionId(null);
+    setActiveConversationId(null);
+    setOptimisticMessages([]);
     setDraft("");
-    setAttachments([]);
+    setStreamError(null);
     setIsSearchOpen(false);
   }
 
-  function selectSession(sessionId: string) {
-    setActiveSessionId(sessionId);
+  function selectSession(conversationId: string) {
+    if (isStreaming) return;
+    setActiveConversationId(conversationId);
+    setOptimisticMessages([]);
     setDraft("");
-    setAttachments([]);
+    setStreamError(null);
     setIsSearchOpen(false);
   }
 
@@ -182,133 +108,152 @@ export function useCoachingWorkspace() {
     setSearchQuery("");
   }
 
-  function removeAttachment(attachment: string) {
-    setAttachments((currentAttachments) =>
-      currentAttachments.filter((item) => item !== attachment),
-    );
+  async function refreshActiveConversation() {
+    if (!activeConversationId) return;
+    await queryClient.invalidateQueries({
+      queryKey: chatKeys.messages(activeConversationId),
+    });
+    await messagesQuery.refetch();
+    setOptimisticMessages([]);
+    setStreamError(null);
   }
 
-  function addAttachments(files: FileList | null) {
-    if (!files?.length) {
-      return;
-    }
+  async function removeConversation(conversationId: string) {
+    await deleteConversation.mutateAsync(conversationId);
+    queryClient.removeQueries({ queryKey: chatKeys.messages(conversationId) });
 
-    setAttachments((currentAttachments) => [
-      ...currentAttachments,
-      ...Array.from(files).map((file) => file.name),
-    ]);
+    if (activeConversationId === conversationId) {
+      createNewSession();
+    }
   }
 
-  function sendMessage(message = draft) {
-    const content = message.trim();
+  async function sendMessage() {
+    const content = draft.trim();
+    if (!content || isStreaming) return false;
 
-    if (!content && attachments.length === 0) {
-      return false;
-    }
-
+    const conversationId = activeConversationId;
     const userMessage: CoachingMessage = {
-      attachments,
-      content: content || "Shared a file for reflection.",
-      id: createId("message"),
+      content,
+      createdAt: new Date().toISOString(),
+      id: createTemporaryId("message"),
       role: "user",
     };
-    const sessionId = activeSessionId ?? createId("session");
+    const assistantMessage: CoachingMessage = {
+      content: "",
+      createdAt: new Date().toISOString(),
+      id: createTemporaryId("reply"),
+      isStreaming: true,
+      role: "assistant",
+    };
+    const controller = new AbortController();
+    let receivedToken = false;
+    const completionRef = {
+      current: null as { conversationId: string } | null,
+    };
 
-    setSessions((currentSessions) => {
-      const existingSession = currentSessions.find(
-        (session) => session.id === sessionId,
-      );
-
-      if (!existingSession) {
-        return [
-          {
-            dateLabel: "Just now",
-            id: sessionId,
-            messages: [userMessage],
-            title: createSessionTitle(content),
-          },
-          ...currentSessions,
-        ];
-      }
-
-      const updatedSession = {
-        ...existingSession,
-        dateLabel: "Just now",
-        messages: [...existingSession.messages, userMessage],
-        title:
-          existingSession.messages.length === 0
-            ? createSessionTitle(content)
-            : existingSession.title,
-      };
-
-      return [
-        updatedSession,
-        ...currentSessions.filter((session) => session.id !== sessionId),
-      ];
-    });
-
-    setActiveSessionId(sessionId);
+    streamController.current = controller;
     setDraft("");
-    setAttachments([]);
-    setPendingReplyCounts((currentCounts) => ({
-      ...currentCounts,
-      [sessionId]: (currentCounts[sessionId] ?? 0) + 1,
-    }));
+    setIsStreaming(true);
+    setStreamError(null);
+    setOptimisticMessages([userMessage, assistantMessage]);
 
-    const timeout = window.setTimeout(() => {
-      setSessions((currentSessions) =>
-        currentSessions.map((session) =>
-          session.id === sessionId
-            ? {
-                ...session,
-                messages: [
-                  ...session.messages,
-                  {
-                    content: createCoachingReply(content),
-                    id: createId("reply"),
-                    role: "assistant",
-                  },
-                ],
-              }
-            : session,
-        ),
+    try {
+      await streamChat(
+        {
+          conversationId: conversationId ?? undefined,
+          message: content,
+          stream: true,
+        },
+        {
+          onDone: (event) => {
+            completionRef.current = { conversationId: event.conversationId };
+          },
+          onToken: (token) => {
+            receivedToken = true;
+            setOptimisticMessages((currentMessages) =>
+              currentMessages.map((message) =>
+                message.id === assistantMessage.id
+                  ? { ...message, content: `${message.content}${token}` }
+                  : message,
+              ),
+            );
+          },
+        },
+        controller.signal,
       );
-      setPendingReplyCounts((currentCounts) => {
-        const count = currentCounts[sessionId] ?? 0;
 
-        if (count <= 1) {
-          const remainingCounts = { ...currentCounts };
+      if (!completionRef.current) {
+        throw new Error("The response ended before it was saved");
+      }
+      const completion = completionRef.current;
 
-          delete remainingCounts[sessionId];
-
-          return remainingCounts;
-        }
-
-        return { ...currentCounts, [sessionId]: count - 1 };
+      setActiveConversationId(completion.conversationId);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: chatKeys.conversations }),
+        queryClient.invalidateQueries({
+          queryKey: chatKeys.messages(completion.conversationId),
+        }),
+      ]);
+      await queryClient.fetchQuery({
+        queryKey: chatKeys.messages(completion.conversationId),
+        queryFn: () => getConversationMessages(completion.conversationId),
       });
-    }, 550);
+      setOptimisticMessages([]);
+    } catch (error) {
+      if (controller.signal.aborted) return false;
 
-    replyTimeouts.current.push(timeout);
+      setDraft(content);
+      setStreamError(
+        receivedToken
+          ? "The response was interrupted. Refresh this conversation to check what was saved."
+          : getErrorMessage(error),
+      );
+      if (!receivedToken) {
+        setOptimisticMessages([]);
+      }
+      if (conversationId) {
+        await queryClient.invalidateQueries({
+          queryKey: chatKeys.messages(conversationId),
+        });
+      }
+      return false;
+    } finally {
+      if (streamController.current === controller) {
+        streamController.current = null;
+      }
+      setIsStreaming(false);
+    }
 
     return true;
   }
 
   return {
-    activeSession,
-    addAttachments,
-    attachments,
+    activeConversationId,
+    activeTitle:
+      activeConversation?.title ??
+      createConversationTitle(messages[0]?.content ?? ""),
+    conversationsError: conversationsQuery.isError,
     createNewSession,
     draft,
-    filteredSessions,
+    filteredConversations,
+    hasActiveConversation:
+      Boolean(activeConversationId) || optimisticMessages.length > 0,
+    isDeletingConversation: deleteConversation.isPending,
+    isHistoryLoading: conversationsQuery.isLoading,
     isSearchOpen,
-    pendingReplyCounts,
-    removeAttachment,
+    isStreaming,
+    isTranscriptError: messagesQuery.isError,
+    isTranscriptLoading:
+      Boolean(activeConversationId) && messagesQuery.isLoading,
+    messages,
+    refreshActiveConversation,
+    removeConversation,
     searchQuery,
     selectSession,
     sendMessage,
-    sessions,
     setDraft,
     setSearchQuery,
+    streamError,
     toggleSearch,
   };
 }

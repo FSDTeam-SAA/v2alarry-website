@@ -141,17 +141,24 @@
   .coaching-nav { display: grid; gap: .75rem; }
   .coaching-nav-button { display: flex; min-height: 3rem; align-items: center; gap: .5rem; border: 0; border-radius: .5rem; padding: .5rem .75rem; background: transparent; color: #111827; cursor: pointer; font: inherit; font-size: 1rem; text-align: left; transition: background-color 180ms ease, transform 180ms ease; }
   .coaching-nav-button:hover { background: rgb(17 24 39 / .05); }
-  .coaching-nav-button:focus-visible, .coaching-history-item:focus-visible, .coaching-profile:focus-visible, .coaching-composer button:focus-visible, .coaching-prompt-list button:focus-visible, .coaching-search-field input:focus-visible, .coaching-search-field button:focus-visible { outline: 3px solid rgb(17 24 39 / .28); outline-offset: 2px; }
+  .coaching-nav-button:focus-visible, .coaching-history-item:focus-visible, .coaching-history-delete:focus-visible, .coaching-profile:focus-visible, .coaching-composer button:focus-visible, .coaching-prompt-list button:focus-visible, .coaching-search-field input:focus-visible, .coaching-search-field button:focus-visible, .coaching-inline-error button:focus-visible, .coaching-dialog-button:focus-visible { outline: 3px solid rgb(17 24 39 / .28); outline-offset: 2px; }
   .coaching-nav-button-primary { background: #f7b626; }
   .coaching-nav-button-primary:hover { background: #f8c64c; transform: translateY(-1px); }
   .coaching-history { display: grid; gap: .5rem; }
   .coaching-history h2 { margin: 0; font-size: 1rem; font-weight: 400; line-height: 3rem; }
   .coaching-history ul { display: grid; gap: .25rem; margin: 0; padding: 0 .25rem; list-style: none; }
+  .coaching-history-row { display: flex; align-items: center; gap: .25rem; }
   .coaching-history-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; align-items: center; gap: .5rem; border: 0; border-radius: .375rem; padding: .5rem; background: transparent; color: #606060; cursor: pointer; font: inherit; text-align: left; }
   .coaching-history-item:hover { background: rgb(17 24 39 / .05); }
   .coaching-history-item-active { background: rgb(247 182 38 / .2); color: #1b1818; font-weight: 500; }
   .coaching-history-item span { overflow: hidden; font-size: 1rem; line-height: 1.5rem; text-overflow: ellipsis; white-space: nowrap; }
   .coaching-history-item time { color: #a3a3a3; font-size: .75rem; white-space: nowrap; }
+  .coaching-history-delete { display: grid; width: 2.75rem; height: 2.75rem; flex: 0 0 2.75rem; place-items: center; border: 0; border-radius: .375rem; background: transparent; color: #766e68; cursor: pointer; }
+  .coaching-history-delete:hover { background: rgb(17 24 39 / .06); color: #1b1818; }
+  .coaching-history-skeletons, .coaching-message-skeletons { display: grid; gap: .5rem; padding: .5rem; }
+  .coaching-history-skeletons span, .coaching-message-skeletons span { display: block; height: 2.75rem; border-radius: .375rem; background: rgb(17 24 39 / .08); animation: coaching-skeleton-pulse 1.2s ease-in-out infinite alternate; }
+  .coaching-message-skeletons span:nth-child(2) { width: 72%; }
+  .coaching-message-skeletons span:nth-child(3) { width: 58%; }
   .coaching-profile { display: flex; width: 100%; align-items: center; gap: .75rem; border: 0; border-radius: .5rem; padding: .5rem .75rem; background: #f9e7b2; color: #111827; cursor: pointer; font: inherit; text-align: left; transition: background-color 180ms ease, transform 180ms ease; }
   .coaching-profile:hover { background: #f7dda0; transform: translateY(-1px); }
   .coaching-profile img { width: 2.5rem; height: 2.5rem; border-radius: 9999px; object-fit: cover; }
@@ -187,6 +194,8 @@
   .coaching-composer-actions button, .coaching-composer-actions span { display: inline-flex; align-items: center; gap: .3125rem; border: 0; border-radius: 9999px; padding: .375rem .5rem; background: transparent; color: #111827; font: inherit; font-size: .875rem; }
   .coaching-composer-actions button { cursor: pointer; }
   .coaching-composer-actions button:hover { background: rgb(17 24 39 / .06); }
+  .coaching-composer-actions button:disabled { cursor: not-allowed; opacity: .55; }
+  .coaching-composer-actions #attachment-unavailable { padding-inline: 0; background: transparent; color: #766e68; font-size: .75rem; }
   .coaching-composer-actions span { background: rgb(17 24 39 / .05); }
   .coaching-send-button { display: grid; width: 2.5rem; height: 2.5rem; place-items: center; border: 0; border-radius: 9999px; background: #f7b626; color: #111827; cursor: pointer; transition: transform 180ms ease, background-color 180ms ease; }
   .coaching-send-button:hover { background: #f8c64c; transform: translateX(.125rem); }
@@ -212,10 +221,20 @@
   .coaching-message-attachment { margin-top: .5rem; background: rgb(255 255 255 / .44); }
   .coaching-typing-indicator { display: inline-flex; align-items: center; gap: .375rem; margin: 0; color: #5d5753; font-size: .8125rem; }
   .coaching-typing-indicator svg { animation: coaching-spin 900ms linear infinite; }
+  .coaching-inline-error { display: flex; width: fit-content; max-width: 100%; align-items: center; gap: .75rem; border: 1px solid #d9d1cb; border-radius: .5rem; padding: .625rem .75rem; background: #fffdfb; color: #5d5753; font-size: .8125rem; }
+  .coaching-inline-error p { margin: 0; }
+  .coaching-inline-error button, .coaching-dialog-button { min-height: 2.75rem; border: 1px solid #d9d1cb; border-radius: .375rem; padding: .5rem .75rem; background: #fffdfb; color: #1b1818; cursor: pointer; font: inherit; }
+  .coaching-inline-error button { display: inline-flex; align-items: center; gap: .375rem; }
+  .coaching-dialog-button-danger { border-color: #a94035; background: #a94035; color: #fff; }
+  .coaching-dialog-button:disabled { cursor: not-allowed; opacity: .6; }
   .coaching-composer-section-conversation { width: min(100%, 41rem); justify-self: center; align-self: end; transform: none; }
 
   @keyframes coaching-spin {
     to { transform: rotate(360deg); }
+  }
+
+  @keyframes coaching-skeleton-pulse {
+    to { opacity: .52; }
   }
 
   @keyframes coaching-blob-drift-one {
@@ -260,7 +279,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .coaching-nav-button, .coaching-profile, .coaching-send-button, .coaching-prompt-list button, .coaching-typing-indicator svg, .coaching-panel::before, .coaching-panel::after { animation: none; transition: none; }
+    .coaching-nav-button, .coaching-profile, .coaching-send-button, .coaching-prompt-list button, .coaching-typing-indicator svg, .coaching-history-skeletons span, .coaching-message-skeletons span, .coaching-panel::before, .coaching-panel::after { animation: none; transition: none; }
     .coaching-message-log { scroll-behavior: auto; }
   }
 

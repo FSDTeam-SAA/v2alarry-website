@@ -1,13 +1,15 @@
 export type CoachingMessage = {
-  attachments?: string[];
   content: string;
+  createdAt: string;
   id: string;
+  isStreaming?: boolean;
   role: "assistant" | "user";
 };
 
-export type CoachingSession = {
-  dateLabel: string;
+export type CoachingConversation = {
+  createdAt: string;
   id: string;
-  messages: CoachingMessage[];
+  messageCount: number;
   title: string;
+  updatedAt: string;
 };

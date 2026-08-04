@@ -12,7 +12,7 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "",
+  title: "LeaderCoach AI - Coaching Workspace",
   description:
     "Design amazing digital experiences that create more happy in the world.",
 };

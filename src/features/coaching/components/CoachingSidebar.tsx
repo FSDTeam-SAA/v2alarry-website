@@ -1,41 +1,66 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
-import { Plus, Search, X } from "lucide-react";
+import { Plus, Search, Trash2, X } from "lucide-react";
 
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-import type { CoachingSession } from "../types";
+import type { CoachingConversation } from "../types";
 
 type CoachingSidebarProps = {
-  activeSessionId: string | null;
-  filteredSessions: CoachingSession[];
+  activeConversationId: string | null;
+  conversationsError: boolean;
+  filteredConversations: CoachingConversation[];
+  isDeletingConversation: boolean;
+  isHistoryLoading: boolean;
   isSearchOpen: boolean;
   onCreateSession: () => void;
+  onDeleteConversation: (conversationId: string) => Promise<void>;
   onSearchQueryChange: (query: string) => void;
-  onSelectSession: (sessionId: string) => void;
+  onSelectSession: (conversationId: string) => void;
   onToggleSearch: () => void;
   searchQuery: string;
 };
 
+function formatConversationDate(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(value));
+}
+
 export function CoachingSidebar({
-  activeSessionId,
-  filteredSessions,
+  activeConversationId,
+  conversationsError,
+  filteredConversations,
+  isDeletingConversation,
+  isHistoryLoading,
   isSearchOpen,
   onCreateSession,
+  onDeleteConversation,
   onSearchQueryChange,
   onSelectSession,
   onToggleSearch,
   searchQuery,
 }: CoachingSidebarProps) {
+  const [conversationToDelete, setConversationToDelete] =
+    useState<CoachingConversation | null>(null);
   const historyTitle = isSearchOpen ? "Search sessions" : "Coaching History";
+
+  async function confirmDelete() {
+    if (!conversationToDelete) return;
+    await onDeleteConversation(conversationToDelete.id);
+    setConversationToDelete(null);
+  }
 
   return (
     <aside className="coaching-sidebar" aria-label="Coaching navigation">
@@ -76,10 +101,10 @@ export function CoachingSidebar({
           aria-labelledby="coaching-history-title"
         >
           <h2 id="coaching-history-title">{historyTitle}</h2>
-          {isSearchOpen && (
+          {isSearchOpen ? (
             <div className="coaching-search-field">
               <label className="sr-only" htmlFor="session-search">
-                Search coaching sessions
+                Search loaded coaching sessions
               </label>
               <Search aria-hidden="true" size={16} />
               <input
@@ -87,11 +112,9 @@ export function CoachingSidebar({
                 id="session-search"
                 onChange={(event) => onSearchQueryChange(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    onToggleSearch();
-                  }
+                  if (event.key === "Escape") onToggleSearch();
                 }}
-                placeholder="Search by topic or message"
+                placeholder="Search titles and loaded messages"
                 type="search"
                 value={searchQuery}
               />
@@ -103,29 +126,57 @@ export function CoachingSidebar({
                 <X aria-hidden="true" size={16} />
               </button>
             </div>
-          )}
-          {filteredSessions.length > 0 ? (
+          ) : null}
+          {isHistoryLoading ? (
+            <div
+              aria-busy="true"
+              aria-label="Loading coaching history"
+              className="coaching-history-skeletons"
+            >
+              <span />
+              <span />
+              <span />
+            </div>
+          ) : conversationsError ? (
+            <p className="coaching-search-empty" role="alert">
+              Unable to load coaching history. Refresh the page to try again.
+            </p>
+          ) : filteredConversations.length > 0 ? (
             <ul>
-              {filteredSessions.map((session) => (
-                <li key={session.id}>
+              {filteredConversations.map((conversation) => (
+                <li className="coaching-history-row" key={conversation.id}>
                   <button
                     aria-current={
-                      activeSessionId === session.id ? "page" : undefined
+                      activeConversationId === conversation.id
+                        ? "page"
+                        : undefined
                     }
-                    className={`coaching-history-item${activeSessionId === session.id ? " coaching-history-item-active" : ""}`}
-                    onClick={() => onSelectSession(session.id)}
-                    title={session.title}
+                    className={`coaching-history-item${activeConversationId === conversation.id ? " coaching-history-item-active" : ""}`}
+                    onClick={() => onSelectSession(conversation.id)}
+                    title={conversation.title}
                     type="button"
                   >
-                    <span>{session.title}</span>
-                    <time>{session.dateLabel}</time>
+                    <span>{conversation.title}</span>
+                    <time dateTime={conversation.updatedAt}>
+                      {formatConversationDate(conversation.updatedAt)}
+                    </time>
+                  </button>
+                  <button
+                    aria-label={`Delete ${conversation.title}`}
+                    className="coaching-history-delete"
+                    onClick={() => setConversationToDelete(conversation)}
+                    type="button"
+                  >
+                    <Trash2 aria-hidden="true" size={16} />
                   </button>
                 </li>
               ))}
             </ul>
           ) : (
             <p className="coaching-search-empty" role="status">
-              No sessions match “{searchQuery}”. Try a different topic.
+              {searchQuery
+                ? `No loaded sessions match “${searchQuery}”.`
+                : "No coaching sessions yet."}
             </p>
           )}
         </section>
@@ -160,9 +211,41 @@ export function CoachingSidebar({
             </div>
             <div>
               <dt>Conversations</dt>
-              <dd>Stored in this browser</dd>
+              <dd>Saved to your account</dd>
             </div>
           </dl>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={conversationToDelete !== null}
+        onOpenChange={(open) => !open && setConversationToDelete(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete this coaching session?</DialogTitle>
+            <DialogDescription>
+              This permanently removes the conversation and its messages from
+              your account.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              className="coaching-dialog-button"
+              onClick={() => setConversationToDelete(null)}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className="coaching-dialog-button coaching-dialog-button-danger"
+              disabled={isDeletingConversation}
+              onClick={() => void confirmDelete()}
+              type="button"
+            >
+              {isDeletingConversation ? "Deleting…" : "Delete session"}
+            </button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </aside>

@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { signIn } from "next-auth/react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,6 +19,23 @@ function FooterLink({ children, href }: { children: string; href: string }) {
 }
 
 export function SignUpForm() {
+  const [googleError, setGoogleError] = useState<string>();
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+
+  async function handleGoogleSignIn() {
+    setGoogleError(undefined);
+    setIsGoogleSubmitting(true);
+
+    const response = await signIn("google", {
+      callbackUrl: "/",
+      redirect: true,
+    });
+    if (response?.error) {
+      setGoogleError("Unable to start Google sign-in. Please try again.");
+      setIsGoogleSubmitting(false);
+    }
+  }
+
   return (
     <form className="auth-form">
       <h1>Create your account</h1>
@@ -51,11 +72,21 @@ export function SignUpForm() {
         Sign In
       </Button>
       <AuthDivider label="Or login with" />
-      <Button className="auth-primary-button" type="button">
+      {googleError ? (
+        <p className="auth-error" role="alert">
+          {googleError}
+        </p>
+      ) : null}
+      <Button
+        className="auth-primary-button"
+        disabled={isGoogleSubmitting}
+        onClick={handleGoogleSignIn}
+        type="button"
+      >
         <span aria-hidden="true" className="auth-google-mark">
           G
         </span>
-        Sign in with Google
+        {isGoogleSubmitting ? "Connecting to Google…" : "Sign in with Google"}
       </Button>
       <FooterLink href="/login">Already have an account?</FooterLink>
     </form>

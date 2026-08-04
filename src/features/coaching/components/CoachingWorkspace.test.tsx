@@ -1,108 +1,87 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
+import { useCoachingWorkspace } from "../hooks/useCoachingWorkspace";
 import { CoachingWorkspace } from "./CoachingWorkspace";
 
-jest.mock("next/image", () => ({
-  __esModule: true,
-  default: () => null,
+jest.mock("next/image", () => ({ __esModule: true, default: () => null }));
+jest.mock("../hooks/useCoachingWorkspace", () => ({
+  useCoachingWorkspace: jest.fn(),
 }));
 
+const mockedWorkspace = jest.mocked(useCoachingWorkspace);
+
 describe("CoachingWorkspace", () => {
+  const removeConversation = jest.fn().mockResolvedValue(undefined);
+
   beforeEach(() => {
-    jest.useFakeTimers();
-    window.localStorage.clear();
+    jest.resetAllMocks();
+    mockedWorkspace.mockReturnValue({
+      activeConversationId: "conversation-1",
+      activeTitle: "Leading Through Change",
+      conversationsError: false,
+      createNewSession: jest.fn(),
+      draft: "",
+      filteredConversations: [
+        {
+          createdAt: "2026-08-04T10:00:00Z",
+          id: "conversation-1",
+          messageCount: 2,
+          title: "Leading Through Change",
+          updatedAt: "2026-08-04T10:00:00Z",
+        },
+      ],
+      hasActiveConversation: true,
+      isDeletingConversation: false,
+      isHistoryLoading: false,
+      isSearchOpen: false,
+      isStreaming: false,
+      isTranscriptError: false,
+      isTranscriptLoading: false,
+      messages: [
+        {
+          content: "What needs the clearest leadership right now?",
+          createdAt: "2026-08-04T10:00:00Z",
+          id: "message-1",
+          role: "assistant",
+        },
+      ],
+      refreshActiveConversation: jest.fn().mockResolvedValue(undefined),
+      removeConversation,
+      searchQuery: "",
+      selectSession: jest.fn(),
+      sendMessage: jest.fn().mockResolvedValue(true),
+      setDraft: jest.fn(),
+      setSearchQuery: jest.fn(),
+      streamError: null,
+      toggleSearch: jest.fn(),
+    });
   });
 
-  afterEach(() => {
-    jest.useRealTimers();
-  });
+  it("explains that attachments are unavailable", () => {
+    render(<CoachingWorkspace />);
 
-  function renderWorkspace() {
-    const renderResult = render(<CoachingWorkspace />);
-
-    act(() => {
-      jest.advanceTimersByTime(0);
-    });
-
-    return renderResult;
-  }
-
-  it("filters sessions and opens the selected conversation", () => {
-    renderWorkspace();
-
-    fireEvent.click(screen.getByRole("button", { name: "Search Sessions" }));
-    fireEvent.change(screen.getByLabelText("Search coaching sessions"), {
-      target: { value: "feedback" },
-    });
-
+    expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
     expect(
-      screen.getByRole("button", { name: /giving tough feedback/i }),
+      screen.getByText("File attachments aren’t available yet."),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /leading through change/i }),
-    ).not.toBeInTheDocument();
+      screen.getByText("Your conversations are saved to your account."),
+    ).toBeInTheDocument();
+  });
+
+  it("requires confirmation before deleting a conversation", async () => {
+    render(<CoachingWorkspace />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /giving tough feedback/i }),
+      screen.getByRole("button", { name: "Delete Leading Through Change" }),
     );
-
     expect(
-      screen.getByRole("heading", { name: "Giving Tough Feedback" }),
+      screen.getByRole("heading", { name: "Delete this coaching session?" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/make the conversation direct and constructive/i),
-    ).toBeInTheDocument();
-  });
 
-  it("creates a locally persisted session and returns a coaching prompt", () => {
-    renderWorkspace();
-
-    fireEvent.change(screen.getByLabelText("What would you like to explore?"), {
-      target: { value: "I'm facing a tough decision at work." },
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Delete session" }));
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Start coaching conversation" }),
-    );
-
-    expect(
-      screen.getByText("I'm facing a tough decision at work."),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByTitle("I'm facing a tough decision…"),
-    ).toBeInTheDocument();
-
-    act(() => {
-      jest.advanceTimersByTime(550);
-    });
-
-    expect(
-      screen.getByText(/two or three options you are weighing/i),
-    ).toBeInTheDocument();
-  });
-
-  it("adds a selected file to the outgoing message", () => {
-    const { container } = renderWorkspace();
-    const attachmentInput =
-      container.querySelector<HTMLInputElement>("input[type='file']");
-
-    if (!attachmentInput) {
-      throw new Error("Expected an attachment input");
-    }
-
-    fireEvent.change(attachmentInput, {
-      target: {
-        files: [new File(["notes"], "team-notes.txt", { type: "text/plain" })],
-      },
-    });
-
-    expect(screen.getByText("team-notes.txt")).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Start coaching conversation" }),
-    );
-
-    expect(
-      screen.getByText("Shared a file for reflection."),
-    ).toBeInTheDocument();
+    expect(removeConversation).toHaveBeenCalledWith("conversation-1");
   });
 });

@@ -14,6 +14,7 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const [error, setError] = useState<string>();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -40,6 +41,19 @@ export function LoginForm() {
     }
 
     setError("Invalid email or password.");
+  }
+
+  async function handleGoogleSignIn() {
+    const callbackUrl = searchParams.get("callbackUrl") ?? "/";
+
+    setError(undefined);
+    setIsGoogleSubmitting(true);
+
+    const response = await signIn("google", { callbackUrl, redirect: true });
+    if (response?.error) {
+      setError("Unable to start Google sign-in. Please try again.");
+      setIsGoogleSubmitting(false);
+    }
   }
 
   return (
@@ -70,20 +84,25 @@ export function LoginForm() {
       ) : null}
       <Button
         className="auth-primary-button"
-        disabled={isSubmitting}
+        disabled={isSubmitting || isGoogleSubmitting}
         type="submit"
       >
         {isSubmitting ? "Logging in…" : "Log in"}
       </Button>
       <AuthDivider label="Or login with" />
-      <Button className="auth-primary-button" type="button">
+      <Button
+        className="auth-primary-button"
+        disabled={isSubmitting || isGoogleSubmitting}
+        onClick={handleGoogleSignIn}
+        type="button"
+      >
         <span aria-hidden="true" className="auth-google-mark">
           G
         </span>
-        Sign in with Google
+        {isGoogleSubmitting ? "Connecting to Google…" : "Sign in with Google"}
       </Button>
       <p className="auth-footer-copy">
-        Don&apos;t have an account? <Link href="/signup">Sign In</Link>
+        Don&apos;t have an account? <Link href="/signup">Sign up</Link>
       </p>
     </form>
   );

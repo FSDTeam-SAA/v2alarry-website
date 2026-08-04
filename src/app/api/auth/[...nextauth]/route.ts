@@ -1,112 +1,151 @@
 // src/app/api/auth/[...nextauth]/route.ts
 
-import NextAuth from "next-auth";
+import NextAuth, { type NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-const baseUrl = process.env.NEXT_PUBLIC_API_URL;
-
-declare module "next-auth" {
-  interface Session {
-    user: {
-      id: string;
-      name: string;
-      email: string;
-      image: string;
-      role: string;
-    };
-    accessToken: string;
-    refreshToken: string;
-  }
-
-  interface User {
-    id: string;
-    name: string;
-    email: string;
-    image: string;
-    role: string;
-    token: string;
-    refreshToken: string;
-  }
-}
-
-declare module "next-auth/jwt" {
-  interface JWT {
-    id: string;
-    name: string;
-    email: string;
-    image: string;
-    role: string;
-    accessToken: string;
-    refreshToken: string;
-  }
-}
+import GoogleProvider from "next-auth/providers/google";
+import { z } from "zod";
 
 import { refreshAccessToken } from "@/features/auth/api/refresh-token.api";
 
-const handler = NextAuth({
-  providers: [
-    CredentialsProvider({
-      name: "Credentials",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          throw new Error("Email and password are required");
-        }
+const baseUrl = process.env.NEXT_PUBLIC_API_URL;
 
-        try {
-          const res = await fetch(`${baseUrl}/auth/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              email: credentials.email,
-              password: credentials.password,
-            }),
-          });
+const backendTokenResponseSchema = z.object({
+  access_token: z.string().min(1),
+  refresh_token: z.string().min(1),
+  access_token_expires_in: z.number().positive(),
+  user: z.object({
+    id: z.number().int(),
+    email: z.string().email(),
+    full_name: z.string().min(1),
+    role: z.string().min(1),
+  }),
+});
 
-          const data = await res.json();
-          console.log("API Login Response:", JSON.stringify(data, null, 2));
+type BackendTokenResponse = z.infer<typeof backendTokenResponseSchema>;
 
-          if (!res.ok) {
-            throw new Error(data.message || "Login failed");
-          }
+function getBackendUrl() {
+  if (!baseUrl) {
+    throw new Error("Authentication service is not configured");
+  }
 
-          const user = data.data?.user;
-          const accessToken = data.data?.accessToken;
+  return baseUrl;
+}
 
-          console.log("User details:", user);
-          console.log("Token:", accessToken);
+async function readBackendTokenResponse(
+  response: Response,
+): Promise<BackendTokenResponse> {
+  const payload: unknown = await response.json().catch(() => undefined);
+  const parsed = backendTokenResponseSchema.safeParse(payload);
 
-          if (!user || !accessToken) {
-            throw new Error("Invalid response from server");
-          }
+  if (!response.ok || !parsed.success) {
+    throw new Error("Authentication failed");
+  }
 
-          // Return the object that NextAuth will use as 'user' in the jwt callback
-          return {
-            id: user._id || user.id, // Ensure we get the ID
-            name: user.name,
-            email: user.email,
-            image: user.profileImage, // Map profileImage to image
-            role: user.role,
-            token: accessToken, // We attach the token here as a property of the user
-            refreshToken: user.refreshToken,
-          };
-        } catch (error) {
-          console.error("Authorize error:", error);
-          throw new Error("Invalid email or password");
-        }
-      },
+  return parsed.data;
+}
+
+async function exchangeGoogleIdToken(
+  idToken: string,
+): Promise<BackendTokenResponse> {
+  const response = await fetch(`${getBackendUrl()}/auth/google`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id_token: idToken }),
+    cache: "no-store",
+  });
+
+  return readBackendTokenResponse(response);
+}
+
+function getProfileImage(profile: unknown): string {
+  if (!profile || typeof profile !== "object") {
+    return "";
+  }
+
+  const picture = (profile as Record<string, unknown>).picture;
+  return typeof picture === "string" ? picture : "";
+}
+
+function toSessionToken(response: BackendTokenResponse, image: string) {
+  return {
+    id: String(response.user.id),
+    name: response.user.full_name,
+    email: response.user.email,
+    image,
+    role: response.user.role,
+    accessToken: response.access_token,
+    refreshToken: response.refresh_token,
+    accessTokenExpires: Date.now() + response.access_token_expires_in * 1000,
+  };
+}
+
+const providers: NextAuthOptions["providers"] = [
+  CredentialsProvider({
+    name: "Credentials",
+    credentials: {
+      email: { label: "Email", type: "email" },
+      password: { label: "Password", type: "password" },
+    },
+    async authorize(credentials) {
+      if (!credentials?.email || !credentials?.password) {
+        throw new Error("Email and password are required");
+      }
+
+      try {
+        const res = await fetch(`${getBackendUrl()}/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: credentials.email,
+            password: credentials.password,
+          }),
+        });
+
+        const data = await readBackendTokenResponse(res);
+
+        return {
+          ...toSessionToken(data, ""),
+          token: data.access_token,
+        };
+      } catch {
+        throw new Error("Invalid email or password");
+      }
+    },
+  }),
+];
+
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  providers.push(
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      authorization: { params: { prompt: "select_account" } },
     }),
-  ],
+  );
+}
 
+const authOptions: NextAuthOptions = {
+  providers,
   session: {
     strategy: "jwt",
   },
 
   callbacks: {
-    async jwt({ token, user, trigger, session }) {
-      // Initial sign in
+    async jwt({ token, user, account, profile, trigger, session }) {
+      if (account?.provider === "google") {
+        if (!account.id_token) {
+          throw new Error("Google sign-in did not return an ID token");
+        }
+
+        return {
+          ...token,
+          ...toSessionToken(
+            await exchangeGoogleIdToken(account.id_token),
+            getProfileImage(profile),
+          ),
+        };
+      }
+
       if (user) {
         return {
           ...token,
@@ -117,36 +156,32 @@ const handler = NextAuth({
           role: user.role,
           accessToken: user.token,
           refreshToken: user.refreshToken,
-          accessTokenExpires: Date.now() + 60 * 60 * 1000, // Default 1 hour expiry
+          accessTokenExpires: user.accessTokenExpires,
         };
       }
 
-      // Update session trigger
       if (trigger === "update" && session) {
         return { ...token, ...session.user };
       }
 
-      // Return previous token if the access token has not expired yet
-      if (Date.now() < token.accessTokenExpires) {
+      if (
+        typeof token.accessTokenExpires === "number" &&
+        Date.now() < token.accessTokenExpires
+      ) {
         return token;
       }
 
-      // Access token has expired, try to update it
       try {
         const refreshedTokens = await refreshAccessToken(token.refreshToken);
 
-        if (!refreshedTokens.status) {
-          throw refreshedTokens;
-        }
-
         return {
           ...token,
-          accessToken: refreshedTokens.data.accessToken,
-          accessTokenExpires: Date.now() + 60 * 60 * 1000, // Update expiration
-          refreshToken: refreshedTokens.data.refreshToken || token.refreshToken, // Fallback to old refresh token
+          accessToken: refreshedTokens.access_token,
+          accessTokenExpires:
+            Date.now() + refreshedTokens.access_token_expires_in * 1000,
+          refreshToken: refreshedTokens.refresh_token,
         };
-      } catch (error) {
-        console.error("Error refreshing access token", error);
+      } catch {
         return {
           ...token,
           error: "RefreshAccessTokenError",
@@ -155,24 +190,24 @@ const handler = NextAuth({
     },
 
     async session({ session, token }) {
-      if (token) {
-        session.user = {
-          ...session.user,
-          id: token.id,
-          name: token.name,
-          email: token.email,
-          image: token.image,
-          role: token.role,
-        };
-        session.accessToken = token.accessToken;
-        session.refreshToken = token.refreshToken;
-        session.error = token.error;
-      }
+      session.user = {
+        ...session.user,
+        id: token.id,
+        name: token.name,
+        email: token.email,
+        image: token.image,
+        role: token.role,
+      };
+      session.accessToken = token.accessToken;
+      session.refreshToken = token.refreshToken;
+      session.error = token.error;
       return session;
     },
   },
 
   secret: process.env.NEXTAUTH_SECRET,
-});
+};
+
+const handler = NextAuth(authOptions);
 
 export { handler as GET, handler as POST };

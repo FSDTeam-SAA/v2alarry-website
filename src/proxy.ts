@@ -6,21 +6,8 @@ export async function proxy(request: NextRequest) {
   const token = await getToken({ req: request });
   const { pathname } = request.nextUrl;
 
-  const userRole = (token?.role as string)?.toUpperCase();
-  const isAdmin = userRole === "ADMIN";
-  const isGuest = !token;
-
-  // Example: Block guests from /dashboard
-  if (isGuest && pathname.startsWith("/dashboard")) {
-    const callbackUrl = encodeURIComponent(pathname);
-    return NextResponse.redirect(
-      new URL(`/login?callbackUrl=${callbackUrl}`, request.url),
-    );
-  }
-
-  // Example: Block non-admins from /dashboard
-  if (!isAdmin && pathname.startsWith("/dashboard")) {
-    return NextResponse.redirect(new URL("/", request.url));
+  if (!token && pathname === "/") {
+    return NextResponse.redirect(new URL("/login?callbackUrl=/", request.url));
   }
 
   return NextResponse.next();

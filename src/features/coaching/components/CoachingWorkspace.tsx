@@ -6,50 +6,40 @@ import { CoachingConversation } from "./CoachingConversation";
 import { CoachingSidebar } from "./CoachingSidebar";
 
 export function CoachingWorkspace() {
-  const {
-    activeSession,
-    addAttachments,
-    attachments,
-    createNewSession,
-    draft,
-    filteredSessions,
-    isSearchOpen,
-    pendingReplyCounts,
-    removeAttachment,
-    searchQuery,
-    selectSession,
-    sendMessage,
-    setDraft,
-    setSearchQuery,
-    toggleSearch,
-  } = useCoachingWorkspace();
+  const workspace = useCoachingWorkspace();
 
   return (
     <main className="coaching-workspace">
       <CoachingSidebar
-        activeSessionId={activeSession?.id ?? null}
-        filteredSessions={filteredSessions}
-        isSearchOpen={isSearchOpen}
-        onCreateSession={createNewSession}
-        onSearchQueryChange={setSearchQuery}
-        onSelectSession={selectSession}
-        onToggleSearch={toggleSearch}
-        searchQuery={searchQuery}
+        activeConversationId={workspace.activeConversationId}
+        conversationsError={workspace.conversationsError}
+        filteredConversations={workspace.filteredConversations}
+        isDeletingConversation={workspace.isDeletingConversation}
+        isHistoryLoading={workspace.isHistoryLoading}
+        isSearchOpen={workspace.isSearchOpen}
+        onCreateSession={workspace.createNewSession}
+        onDeleteConversation={workspace.removeConversation}
+        onSearchQueryChange={workspace.setSearchQuery}
+        onSelectSession={workspace.selectSession}
+        onToggleSearch={workspace.toggleSearch}
+        searchQuery={workspace.searchQuery}
       />
       <section className="coaching-main">
         <CoachingConversation
-          activeSession={activeSession}
-          attachments={attachments}
-          draft={draft}
-          isReplyPending={
-            (pendingReplyCounts[activeSession?.id ?? ""] ?? 0) > 0
-          }
-          onAddAttachments={addAttachments}
-          onDraftChange={setDraft}
-          onRemoveAttachment={removeAttachment}
-          onSendMessage={sendMessage}
-          onUsePrompt={setDraft}
+          activeTitle={workspace.activeTitle}
+          canRefreshConversation={Boolean(workspace.activeConversationId)}
+          draft={workspace.draft}
+          hasActiveConversation={workspace.hasActiveConversation}
+          isStreaming={workspace.isStreaming}
+          isTranscriptError={workspace.isTranscriptError}
+          isTranscriptLoading={workspace.isTranscriptLoading}
+          messages={workspace.messages}
+          onDraftChange={workspace.setDraft}
+          onRefreshConversation={workspace.refreshActiveConversation}
+          onSendMessage={workspace.sendMessage}
+          onUsePrompt={workspace.setDraft}
           prompts={suggestedPrompts}
+          streamError={workspace.streamError}
         />
       </section>
     </main>

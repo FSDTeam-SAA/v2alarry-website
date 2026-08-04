@@ -46,4 +46,21 @@ describe("LoginForm", () => {
       });
     });
   });
+
+  it("starts the Google OAuth flow with the current callback URL", async () => {
+    mockSignIn.mockResolvedValue(undefined);
+
+    render(<LoginForm />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sign in with Google" }),
+    );
+
+    await waitFor(() => {
+      expect(mockSignIn).toHaveBeenCalledWith("google", {
+        callbackUrl: "/",
+        redirect: true,
+      });
+    });
+  });
 });
