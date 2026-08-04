@@ -18,7 +18,9 @@ describe("CoachingWorkspace", () => {
     mockedWorkspace.mockReturnValue({
       activeConversationId: "conversation-1",
       activeTitle: "Leading Through Change",
+      accountName: "Test Person",
       conversationsError: false,
+      copySubmittedMessage: jest.fn().mockResolvedValue(undefined),
       createNewSession: jest.fn(),
       draft: "",
       filteredConversations: [
@@ -31,6 +33,7 @@ describe("CoachingWorkspace", () => {
         },
       ],
       hasActiveConversation: true,
+      greetingName: null,
       isDeletingConversation: false,
       isHistoryLoading: false,
       isSearchOpen: false,
@@ -48,32 +51,31 @@ describe("CoachingWorkspace", () => {
       refreshActiveConversation: jest.fn().mockResolvedValue(undefined),
       removeConversation,
       searchQuery: "",
+      sessionStatus: "authenticated",
       selectSession: jest.fn(),
       sendMessage: jest.fn().mockResolvedValue(true),
       setDraft: jest.fn(),
       setSearchQuery: jest.fn(),
       streamError: null,
+      submissionState: { status: "idle" },
       toggleSearch: jest.fn(),
     });
   });
 
-  it("explains that attachments are unavailable", () => {
+  it("uses factual coaching and account-saving language", () => {
     render(<CoachingWorkspace />);
 
-    expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
-    expect(
-      screen.getByText("File attachments aren’t available yet."),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Your conversations are saved to your account."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Leadership coaching session")).toBeInTheDocument();
+    expect(screen.getByText("Saved to your account")).toBeInTheDocument();
   });
 
   it("requires confirmation before deleting a conversation", async () => {
     render(<CoachingWorkspace />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Delete Leading Through Change" }),
+      screen.getByRole("button", {
+        name: "Delete session: Leading Through Change",
+      }),
     );
     expect(
       screen.getByRole("heading", { name: "Delete this coaching session?" }),

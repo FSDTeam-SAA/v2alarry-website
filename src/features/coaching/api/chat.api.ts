@@ -23,10 +23,11 @@ const messageSchema = z.object({
 const streamEventSchema = z.discriminatedUnion("type", [
   z.object({ content: z.string(), type: z.literal("token") }),
   z.object({
+    assistant_message_id: z.string().min(1),
     conversation_id: z.string().min(1),
-    message_id: z.string().min(1),
-    metadata: z.record(z.unknown()),
+    persisted: z.literal(true),
     type: z.literal("done"),
+    user_message_id: z.string().min(1),
   }),
   z.object({ content: z.string(), type: z.literal("error") }),
 ]);
@@ -38,10 +39,11 @@ type StreamChatInput = {
 };
 
 type StreamChatHandlers = {
+  onAccepted?: () => void;
   onDone: (event: {
+    assistantMessageId: string;
     conversationId: string;
-    messageId: string;
-    metadata: Record<string, unknown>;
+    userMessageId: string;
   }) => void;
   onToken: (token: string) => void;
 };
@@ -121,6 +123,8 @@ export async function streamChat(
     );
   }
 
+  handlers.onAccepted?.();
+
   if (!response.body) {
     throw new Error("The chat stream was unavailable");
   }
@@ -156,9 +160,9 @@ export async function streamChat(
         handlers.onToken(event.data.content);
       } else if (event.data.type === "done") {
         handlers.onDone({
+          assistantMessageId: event.data.assistant_message_id,
           conversationId: event.data.conversation_id,
-          messageId: event.data.message_id,
-          metadata: event.data.metadata,
+          userMessageId: event.data.user_message_id,
         });
       } else {
         throw new Error(event.data.content);

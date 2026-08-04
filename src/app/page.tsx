@@ -1,5 +1,5 @@
-import { CoachingWorkspace } from "@/features/coaching/components/CoachingWorkspace";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <CoachingWorkspace />;
+  redirect("/coaching/new");
 }

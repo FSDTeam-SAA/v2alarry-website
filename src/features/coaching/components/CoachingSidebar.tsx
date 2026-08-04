@@ -18,11 +18,13 @@ import type { CoachingConversation } from "../types";
 
 type CoachingSidebarProps = {
   activeConversationId: string | null;
+  accountName: string;
   conversationsError: boolean;
   filteredConversations: CoachingConversation[];
   isDeletingConversation: boolean;
   isHistoryLoading: boolean;
   isSearchOpen: boolean;
+  isStreaming: boolean;
   onCreateSession: () => void;
   onDeleteConversation: (conversationId: string) => Promise<void>;
   onSearchQueryChange: (query: string) => void;
@@ -31,20 +33,44 @@ type CoachingSidebarProps = {
   searchQuery: string;
 };
 
-function formatConversationDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-  }).format(new Date(value));
+function groupConversations(conversations: CoachingConversation[]) {
+  const now = new Date();
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  );
+  const previousWeek = new Date(startOfToday);
+  previousWeek.setDate(previousWeek.getDate() - 7);
+  const groups = new Map<string, CoachingConversation[]>([
+    ["Today", []],
+    ["Previous 7 days", []],
+    ["Earlier", []],
+  ]);
+
+  conversations.forEach((conversation) => {
+    const updatedAt = new Date(conversation.updatedAt);
+    const group =
+      updatedAt >= startOfToday
+        ? "Today"
+        : updatedAt >= previousWeek
+          ? "Previous 7 days"
+          : "Earlier";
+    groups.get(group)?.push(conversation);
+  });
+
+  return Array.from(groups).filter(([, items]) => items.length > 0);
 }
 
 export function CoachingSidebar({
   activeConversationId,
+  accountName,
   conversationsError,
   filteredConversations,
   isDeletingConversation,
   isHistoryLoading,
   isSearchOpen,
+  isStreaming,
   onCreateSession,
   onDeleteConversation,
   onSearchQueryChange,
@@ -55,6 +81,7 @@ export function CoachingSidebar({
   const [conversationToDelete, setConversationToDelete] =
     useState<CoachingConversation | null>(null);
   const historyTitle = isSearchOpen ? "Search sessions" : "Coaching History";
+  const conversationGroups = groupConversations(filteredConversations);
 
   async function confirmDelete() {
     if (!conversationToDelete) return;
@@ -75,10 +102,10 @@ export function CoachingSidebar({
             width={1536}
           />
         </div>
-
         <nav className="coaching-nav" aria-label="Coaching sessions">
           <button
             className="coaching-nav-button coaching-nav-button-primary"
+            disabled={isStreaming}
             onClick={onCreateSession}
             type="button"
           >
@@ -95,7 +122,6 @@ export function CoachingSidebar({
             <span>Search Sessions</span>
           </button>
         </nav>
-
         <section
           className={`coaching-history${isSearchOpen ? " coaching-history-search" : ""}`}
           aria-labelledby="coaching-history-title"
@@ -104,17 +130,17 @@ export function CoachingSidebar({
           {isSearchOpen ? (
             <div className="coaching-search-field">
               <label className="sr-only" htmlFor="session-search">
-                Search loaded coaching sessions
+                Search session titles
               </label>
               <Search aria-hidden="true" size={16} />
               <input
                 autoFocus
                 id="session-search"
                 onChange={(event) => onSearchQueryChange(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") onToggleSearch();
-                }}
-                placeholder="Search titles and loaded messages"
+                onKeyDown={(event) =>
+                  event.key === "Escape" && onToggleSearch()
+                }
+                placeholder="Search session titles"
                 type="search"
                 value={searchQuery}
               />
@@ -137,78 +163,78 @@ export function CoachingSidebar({
               <span />
               <span />
             </div>
-          ) : conversationsError ? (
+          ) : null}
+          {conversationsError ? (
             <p className="coaching-search-empty" role="alert">
               Unable to load coaching history. Refresh the page to try again.
             </p>
-          ) : filteredConversations.length > 0 ? (
-            <ul>
-              {filteredConversations.map((conversation) => (
-                <li className="coaching-history-row" key={conversation.id}>
-                  <button
-                    aria-current={
-                      activeConversationId === conversation.id
-                        ? "page"
-                        : undefined
-                    }
-                    className={`coaching-history-item${activeConversationId === conversation.id ? " coaching-history-item-active" : ""}`}
-                    onClick={() => onSelectSession(conversation.id)}
-                    title={conversation.title}
-                    type="button"
-                  >
-                    <span>{conversation.title}</span>
-                    <time dateTime={conversation.updatedAt}>
-                      {formatConversationDate(conversation.updatedAt)}
-                    </time>
-                  </button>
-                  <button
-                    aria-label={`Delete ${conversation.title}`}
-                    className="coaching-history-delete"
-                    onClick={() => setConversationToDelete(conversation)}
-                    type="button"
-                  >
-                    <Trash2 aria-hidden="true" size={16} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
+          ) : null}
+          {!isHistoryLoading &&
+          !conversationsError &&
+          filteredConversations.length > 0
+            ? conversationGroups.map(([groupName, conversations]) => (
+                <section className="coaching-history-group" key={groupName}>
+                  <h3>{groupName}</h3>
+                  <ul>
+                    {conversations.map((conversation) => (
+                      <li
+                        className="coaching-history-row"
+                        key={conversation.id}
+                      >
+                        <button
+                          aria-current={
+                            activeConversationId === conversation.id
+                              ? "page"
+                              : undefined
+                          }
+                          className={`coaching-history-item${activeConversationId === conversation.id ? " coaching-history-item-active" : ""}`}
+                          onClick={() => onSelectSession(conversation.id)}
+                          title={conversation.title}
+                          type="button"
+                        >
+                          <span>{conversation.title}</span>
+                        </button>
+                        <button
+                          aria-label={`Delete session: ${conversation.title}`}
+                          className="coaching-history-delete"
+                          disabled={isStreaming}
+                          onClick={() => setConversationToDelete(conversation)}
+                          type="button"
+                        >
+                          <Trash2 aria-hidden="true" size={16} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))
+            : null}
+          {!isHistoryLoading &&
+          !conversationsError &&
+          filteredConversations.length === 0 ? (
             <p className="coaching-search-empty" role="status">
               {searchQuery
-                ? `No loaded sessions match “${searchQuery}”.`
+                ? `No session titles match “${searchQuery}”.`
                 : "No coaching sessions yet."}
             </p>
-          )}
+          ) : null}
         </section>
       </div>
-
       <Dialog>
         <DialogTrigger asChild>
           <button className="coaching-profile" type="button">
-            <Image
-              alt="Jane Cooper"
-              height={40}
-              src="/images/jane-cooper-avatar.png"
-              width={40}
-            />
             <span>
-              <strong>Jane Cooper</strong>
-              <span>Free</span>
+              <strong>{accountName}</strong>
+              <span>Account</span>
             </span>
           </button>
         </DialogTrigger>
         <DialogContent className="coaching-account-dialog">
           <DialogHeader>
             <DialogTitle>Account</DialogTitle>
-            <DialogDescription>
-              Jane Cooper is currently on the Free plan.
-            </DialogDescription>
+            <DialogDescription>Your Jess Mode account.</DialogDescription>
           </DialogHeader>
           <dl>
-            <div>
-              <dt>Plan</dt>
-              <dd>Free</dd>
-            </div>
             <div>
               <dt>Conversations</dt>
               <dd>Saved to your account</dd>
@@ -216,7 +242,6 @@ export function CoachingSidebar({
           </dl>
         </DialogContent>
       </Dialog>
-
       <Dialog
         open={conversationToDelete !== null}
         onOpenChange={(open) => !open && setConversationToDelete(null)}
@@ -225,8 +250,7 @@ export function CoachingSidebar({
           <DialogHeader>
             <DialogTitle>Delete this coaching session?</DialogTitle>
             <DialogDescription>
-              This permanently removes the conversation and its messages from
-              your account.
+              This removes the conversation and its messages from your account.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -239,7 +263,7 @@ export function CoachingSidebar({
             </button>
             <button
               className="coaching-dialog-button coaching-dialog-button-danger"
-              disabled={isDeletingConversation}
+              disabled={isDeletingConversation || isStreaming}
               onClick={() => void confirmDelete()}
               type="button"
             >

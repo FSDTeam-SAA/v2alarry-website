@@ -1,6 +1,6 @@
 "use client";
 
-import { suggestedPrompts } from "../coaching-data";
+import { coachingStarters } from "../coaching-data";
 import { useCoachingWorkspace } from "../hooks/useCoachingWorkspace";
 import { CoachingConversation } from "./CoachingConversation";
 import { CoachingSidebar } from "./CoachingSidebar";
@@ -12,11 +12,13 @@ export function CoachingWorkspace() {
     <main className="coaching-workspace ">
       <CoachingSidebar
         activeConversationId={workspace.activeConversationId}
+        accountName={workspace.accountName}
         conversationsError={workspace.conversationsError}
         filteredConversations={workspace.filteredConversations}
         isDeletingConversation={workspace.isDeletingConversation}
         isHistoryLoading={workspace.isHistoryLoading}
         isSearchOpen={workspace.isSearchOpen}
+        isStreaming={workspace.isStreaming}
         onCreateSession={workspace.createNewSession}
         onDeleteConversation={workspace.removeConversation}
         onSearchQueryChange={workspace.setSearchQuery}
@@ -28,7 +30,9 @@ export function CoachingWorkspace() {
         <CoachingConversation
           activeTitle={workspace.activeTitle}
           canRefreshConversation={Boolean(workspace.activeConversationId)}
+          copySubmittedMessage={workspace.copySubmittedMessage}
           draft={workspace.draft}
+          greetingName={workspace.greetingName}
           hasActiveConversation={workspace.hasActiveConversation}
           isStreaming={workspace.isStreaming}
           isTranscriptError={workspace.isTranscriptError}
@@ -38,8 +42,9 @@ export function CoachingWorkspace() {
           onRefreshConversation={workspace.refreshActiveConversation}
           onSendMessage={workspace.sendMessage}
           onUsePrompt={workspace.setDraft}
-          prompts={suggestedPrompts}
+          starters={coachingStarters}
           streamError={workspace.streamError}
+          submissionState={workspace.submissionState}
         />
       </section>
     </main>

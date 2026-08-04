@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { getConversationMessages, streamChat } from "../api/chat.api";
-import type { CoachingMessage } from "../types";
+import type { CoachingMessage, SubmissionState } from "../types";
 import {
   chatKeys,
   useConversationMessages,
@@ -12,40 +14,46 @@ import {
   useDeleteConversation,
 } from "./useChat";
 
+const NEW_SESSION_KEY = "new";
+
 function createTemporaryId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function createConversationTitle(message: string) {
-  const words = message.trim().split(/\s+/).slice(0, 5).join(" ");
-  return words || "New coaching session";
 }
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error
     ? error.message
-    : "Unable to complete the response";
+    : "Jess couldn’t respond just now.";
+}
+
+function getGreetingName(name: string | null | undefined) {
+  const trimmedName = name?.trim();
+  return trimmedName ? trimmedName.split(/\s+/u)[0] : null;
 }
 
 export function useCoachingWorkspace() {
+  const router = useRouter();
+  const params = useParams<{ conversationId?: string | string[] }>();
   const queryClient = useQueryClient();
+  const { data: session, status: sessionStatus } = useSession();
   const conversationsQuery = useConversations();
-  const [activeConversationId, setActiveConversationId] = useState<
-    string | null
-  >(null);
+  const activeConversationId =
+    typeof params.conversationId === "string" ? params.conversationId : null;
   const messagesQuery = useConversationMessages(activeConversationId);
   const deleteConversation = useDeleteConversation();
-  const [draft, setDraft] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [optimisticMessages, setOptimisticMessages] = useState<
     CoachingMessage[]
   >([]);
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [submissionState, setSubmissionState] = useState<SubmissionState>({
+    status: "idle",
+  });
   const [streamError, setStreamError] = useState<string | null>(null);
   const streamController = useRef<AbortController | null>(null);
-
-  useEffect(() => () => streamController.current?.abort(), []);
+  const draftKey = activeConversationId ?? NEW_SESSION_KEY;
+  const draft = drafts[draftKey] ?? "";
 
   const activeConversation = useMemo(
     () =>
@@ -64,43 +72,38 @@ export function useCoachingWorkspace() {
     const query = searchQuery.trim().toLocaleLowerCase();
     if (!query) return conversationsQuery.data ?? [];
 
-    return (conversationsQuery.data ?? []).filter((conversation) => {
-      const loadedMessages =
-        conversation.id === activeConversationId
-          ? messages
-          : queryClient.getQueryData<CoachingMessage[]>(
-              chatKeys.messages(conversation.id),
-            );
-      const messageText =
-        loadedMessages?.map((message) => message.content).join(" ") ?? "";
+    return (conversationsQuery.data ?? []).filter((conversation) =>
+      conversation.title.toLocaleLowerCase().includes(query),
+    );
+  }, [conversationsQuery.data, searchQuery]);
 
-      return `${conversation.title} ${messageText}`
-        .toLocaleLowerCase()
-        .includes(query);
-    });
-  }, [
-    activeConversationId,
-    conversationsQuery.data,
-    messages,
-    queryClient,
-    searchQuery,
-  ]);
+  const isStreaming =
+    submissionState.status === "sending" ||
+    submissionState.status === "streaming";
+
+  function setDraft(value: string) {
+    setDrafts((currentDrafts) => ({
+      ...currentDrafts,
+      [draftKey]: value,
+    }));
+  }
 
   function createNewSession() {
-    setActiveConversationId(null);
+    if (isStreaming) return;
     setOptimisticMessages([]);
-    setDraft("");
     setStreamError(null);
+    setSubmissionState({ status: "idle" });
     setIsSearchOpen(false);
+    router.push("/coaching/new");
   }
 
   function selectSession(conversationId: string) {
     if (isStreaming) return;
-    setActiveConversationId(conversationId);
     setOptimisticMessages([]);
-    setDraft("");
     setStreamError(null);
+    setSubmissionState({ status: "idle" });
     setIsSearchOpen(false);
+    router.push(`/coaching/${conversationId}`);
   }
 
   function toggleSearch() {
@@ -110,28 +113,70 @@ export function useCoachingWorkspace() {
 
   async function refreshActiveConversation() {
     if (!activeConversationId) return;
-    await queryClient.invalidateQueries({
+
+    const refreshedMessages = await queryClient.fetchQuery({
       queryKey: chatKeys.messages(activeConversationId),
+      queryFn: () => getConversationMessages(activeConversationId),
+      staleTime: 0,
     });
-    await messagesQuery.refetch();
+
+    if (submissionState.status === "outcome-unknown") {
+      const wasSaved = refreshedMessages.some(
+        (message) =>
+          message.role === "user" &&
+          message.content === submissionState.draftSnapshot,
+      );
+
+      if (wasSaved) {
+        setDraft("");
+        setSubmissionState({ status: "idle" });
+        setStreamError(null);
+      } else {
+        setDraft(submissionState.draftSnapshot);
+        setSubmissionState({
+          draftSnapshot: submissionState.draftSnapshot,
+          status: "failed-before-accepted",
+        });
+      }
+    }
+
     setOptimisticMessages([]);
-    setStreamError(null);
   }
 
   async function removeConversation(conversationId: string) {
     await deleteConversation.mutateAsync(conversationId);
     queryClient.removeQueries({ queryKey: chatKeys.messages(conversationId) });
+    setDrafts((currentDrafts) => {
+      const remainingDrafts = { ...currentDrafts };
+      delete remainingDrafts[conversationId];
+      return remainingDrafts;
+    });
 
     if (activeConversationId === conversationId) {
       createNewSession();
     }
   }
 
+  async function copySubmittedMessage() {
+    if (submissionState.status !== "outcome-unknown" || !navigator.clipboard) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(submissionState.draftSnapshot);
+  }
+
   async function sendMessage() {
     const content = draft.trim();
-    if (!content || isStreaming) return false;
+    if (
+      !content ||
+      isStreaming ||
+      submissionState.status === "outcome-unknown"
+    ) {
+      return false;
+    }
 
-    const conversationId = activeConversationId;
+    const conversationId = activeConversationId ?? undefined;
+    const submissionDraftKey = draftKey;
     const userMessage: CoachingMessage = {
       content,
       createdAt: new Date().toISOString(),
@@ -146,27 +191,39 @@ export function useCoachingWorkspace() {
       role: "assistant",
     };
     const controller = new AbortController();
+    let requestAccepted = false;
     let receivedToken = false;
-    const completionRef = {
-      current: null as { conversationId: string } | null,
-    };
+    let completion:
+      | {
+          assistantMessageId: string;
+          conversationId: string;
+          userMessageId: string;
+        }
+      | undefined;
 
     streamController.current = controller;
-    setDraft("");
-    setIsStreaming(true);
+    setSubmissionState({ draftSnapshot: content, status: "sending" });
     setStreamError(null);
     setOptimisticMessages([userMessage, assistantMessage]);
 
     try {
       await streamChat(
+        { conversationId, message: content, stream: true },
         {
-          conversationId: conversationId ?? undefined,
-          message: content,
-          stream: true,
-        },
-        {
+          onAccepted: () => {
+            requestAccepted = true;
+            setDrafts((currentDrafts) => ({
+              ...currentDrafts,
+              [submissionDraftKey]: "",
+            }));
+            setSubmissionState({
+              conversationId,
+              draftSnapshot: content,
+              status: "streaming",
+            });
+          },
           onDone: (event) => {
-            completionRef.current = { conversationId: event.conversationId };
+            completion = event;
           },
           onToken: (token) => {
             receivedToken = true;
@@ -182,60 +239,71 @@ export function useCoachingWorkspace() {
         controller.signal,
       );
 
-      if (!completionRef.current) {
+      const persistedCompletion = completion;
+      if (!persistedCompletion) {
         throw new Error("The response ended before it was saved");
       }
-      const completion = completionRef.current;
 
-      setActiveConversationId(completion.conversationId);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: chatKeys.conversations }),
         queryClient.invalidateQueries({
-          queryKey: chatKeys.messages(completion.conversationId),
+          queryKey: chatKeys.messages(persistedCompletion.conversationId),
         }),
       ]);
       await queryClient.fetchQuery({
-        queryKey: chatKeys.messages(completion.conversationId),
-        queryFn: () => getConversationMessages(completion.conversationId),
+        queryKey: chatKeys.messages(persistedCompletion.conversationId),
+        queryFn: () =>
+          getConversationMessages(persistedCompletion.conversationId),
+        staleTime: 0,
       });
       setOptimisticMessages([]);
+      setSubmissionState({ status: "completed" });
+      router.replace(`/coaching/${persistedCompletion.conversationId}`);
+      return true;
     } catch (error) {
-      if (controller.signal.aborted) return false;
-
-      setDraft(content);
-      setStreamError(
-        receivedToken
-          ? "The response was interrupted. Refresh this conversation to check what was saved."
-          : getErrorMessage(error),
-      );
-      if (!receivedToken) {
-        setOptimisticMessages([]);
-      }
-      if (conversationId) {
-        await queryClient.invalidateQueries({
-          queryKey: chatKeys.messages(conversationId),
+      if (requestAccepted || receivedToken || controller.signal.aborted) {
+        setSubmissionState({
+          conversationId,
+          draftSnapshot: content,
+          status: "outcome-unknown",
         });
+        setStreamError(
+          "The connection was interrupted. Jess may have saved part of this exchange.",
+        );
+      } else {
+        setOptimisticMessages([]);
+        setDrafts((currentDrafts) => ({
+          ...currentDrafts,
+          [submissionDraftKey]: content,
+        }));
+        setSubmissionState({
+          draftSnapshot: content,
+          status: "failed-before-accepted",
+        });
+        setStreamError(getErrorMessage(error));
       }
       return false;
     } finally {
       if (streamController.current === controller) {
         streamController.current = null;
       }
-      setIsStreaming(false);
     }
-
-    return true;
   }
 
   return {
     activeConversationId,
-    activeTitle:
-      activeConversation?.title ??
-      createConversationTitle(messages[0]?.content ?? ""),
+    activeTitle: activeConversation?.title ?? "New coaching session",
+    accountName:
+      sessionStatus === "authenticated" ? session.user.name : "Account",
     conversationsError: conversationsQuery.isError,
+    copySubmittedMessage,
     createNewSession,
     draft,
     filteredConversations,
+    greetingName:
+      sessionStatus === "authenticated"
+        ? getGreetingName(session.user.name)
+        : null,
     hasActiveConversation:
       Boolean(activeConversationId) || optimisticMessages.length > 0,
     isDeletingConversation: deleteConversation.isPending,
@@ -251,9 +319,11 @@ export function useCoachingWorkspace() {
     searchQuery,
     selectSession,
     sendMessage,
+    sessionStatus,
     setDraft,
     setSearchQuery,
     streamError,
+    submissionState,
     toggleSearch,
   };
 }

@@ -30,7 +30,7 @@ describe("streamChat", () => {
           );
           controller.enqueue(
             encoder.encode(
-              'lo"}\n\ndata: {"type":"done","conversation_id":"conversation-1","message_id":"message-1","metadata":{}}\n\ndata: [DONE]\n\n',
+              'lo"}\n\ndata: {"type":"done","conversation_id":"conversation-1","user_message_id":"user-message-1","assistant_message_id":"assistant-message-1","persisted":true}\n\ndata: [DONE]\n\n',
             ),
           );
           controller.close();
@@ -46,8 +46,8 @@ describe("streamChat", () => {
     expect(onToken).toHaveBeenCalledWith("Hello");
     expect(onDone).toHaveBeenCalledWith({
       conversationId: "conversation-1",
-      messageId: "message-1",
-      metadata: {},
+      userMessageId: "user-message-1",
+      assistantMessageId: "assistant-message-1",
     });
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/chat/"),
