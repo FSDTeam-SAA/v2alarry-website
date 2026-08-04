@@ -14,6 +14,9 @@ const config: Config = {
   setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
+    "^react-markdown$": "<rootDir>/src/test/mocks/react-markdown.tsx",
+    "^remark-gfm$": "<rootDir>/src/test/mocks/remark-gfm.ts",
+    "^rehype-sanitize$": "<rootDir>/src/test/mocks/rehype-sanitize.ts",
   },
 };
 

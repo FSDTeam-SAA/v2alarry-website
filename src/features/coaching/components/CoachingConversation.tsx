@@ -12,6 +12,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+import { Badge } from "@/components/ui/badge";
+
+import { AssistantMessage } from "./AssistantMessage";
 import type {
   CoachingMessage,
   CoachingStarter,
@@ -182,7 +185,14 @@ export function CoachingConversation({
                   {message.role === "assistant" ? (
                     <span className="coaching-message-author">Jess</span>
                   ) : null}
-                  <p>{message.content}</p>
+                  {message.role === "assistant" ? (
+                    <AssistantMessage
+                      content={message.content}
+                      isStreaming={false}
+                    />
+                  ) : (
+                    <p>{message.content}</p>
+                  )}
                 </article>
               ))}
               {streamingMessage ? (
@@ -191,7 +201,10 @@ export function CoachingConversation({
                   className="coaching-message coaching-message-assistant coaching-message-streaming"
                 >
                   <span className="coaching-message-author">Jess</span>
-                  <p>{streamingMessage.content}</p>
+                  <AssistantMessage
+                    content={streamingMessage.content}
+                    isStreaming
+                  />
                 </article>
               ) : null}
             </div>
@@ -213,7 +226,7 @@ export function CoachingConversation({
       >
         {!hasActiveConversation ? (
           <div className="coaching-intro coaching-intro-new">
-            <p className="coaching-eyebrow">Jess Mode</p>
+            <Badge className="coaching-eyebrow bg-[#ffc338]">Jess Mode</Badge>
             {greetingName ? (
               <p className="coaching-greeting">Welcome back, {greetingName}.</p>
             ) : null}
