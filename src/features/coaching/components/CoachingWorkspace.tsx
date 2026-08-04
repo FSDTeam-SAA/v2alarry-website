@@ -9,7 +9,7 @@ export function CoachingWorkspace() {
   const workspace = useCoachingWorkspace();
 
   return (
-    <main className="coaching-workspace">
+    <main className="coaching-workspace ">
       <CoachingSidebar
         activeConversationId={workspace.activeConversationId}
         conversationsError={workspace.conversationsError}
@@ -24,7 +24,7 @@ export function CoachingWorkspace() {
         onToggleSearch={workspace.toggleSearch}
         searchQuery={workspace.searchQuery}
       />
-      <section className="coaching-main">
+      <section className="coaching-main ">
         <CoachingConversation
           activeTitle={workspace.activeTitle}
           canRefreshConversation={Boolean(workspace.activeConversationId)}

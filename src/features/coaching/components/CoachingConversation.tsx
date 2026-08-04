@@ -89,7 +89,7 @@ export function CoachingConversation({
           </header>
           <div
             aria-live="polite"
-            className="coaching-message-log"
+            className="coaching-message-log max-w-[720px] mx-auto"
             ref={messageLogRef}
             role="log"
           >
@@ -120,7 +120,7 @@ export function CoachingConversation({
             ) : null}
             {messages.map((message) => (
               <article
-                className={`coaching-message coaching-message-${message.role}`}
+                className={`coaching-message  coaching-message-${message.role}`}
                 key={message.id}
               >
                 <p>{message.content}</p>
