@@ -13,6 +13,7 @@ export function CoachingWorkspace() {
       <CoachingSidebar
         activeConversationId={workspace.activeConversationId}
         accountName={workspace.accountName}
+        conversationCount={workspace.conversationCount}
         conversationsError={workspace.conversationsError}
         filteredConversations={workspace.filteredConversations}
         isDeletingConversation={workspace.isDeletingConversation}
@@ -29,6 +30,7 @@ export function CoachingWorkspace() {
       <section className="coaching-main ">
         <CoachingConversation
           activeTitle={workspace.activeTitle}
+          activeConversationId={workspace.activeConversationId}
           canRefreshConversation={Boolean(workspace.activeConversationId)}
           copySubmittedMessage={workspace.copySubmittedMessage}
           draft={workspace.draft}
@@ -41,6 +43,7 @@ export function CoachingWorkspace() {
           onDraftChange={workspace.setDraft}
           onRefreshConversation={workspace.refreshActiveConversation}
           onSendMessage={workspace.sendMessage}
+          onStopGenerating={workspace.stopGenerating}
           onUsePrompt={workspace.setDraft}
           starters={coachingStarters}
           streamError={workspace.streamError}

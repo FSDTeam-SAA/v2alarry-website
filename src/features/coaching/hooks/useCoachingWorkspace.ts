@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -24,6 +24,29 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error
     ? error.message
     : "Jess couldn’t respond just now.";
+}
+
+export function getStreamFailureRecovery({
+  error,
+  hasReceivedToken,
+  isAborted,
+}: {
+  error: unknown;
+  hasReceivedToken: boolean;
+  isAborted: boolean;
+}) {
+  if (hasReceivedToken || isAborted) {
+    return {
+      errorMessage:
+        "The response was interrupted. Refresh this session to check whether it was saved.",
+      preservePartialResponse: true,
+    };
+  }
+
+  return {
+    errorMessage: getErrorMessage(error),
+    preservePartialResponse: false,
+  };
 }
 
 function getGreetingName(name: string | null | undefined) {
@@ -52,8 +75,11 @@ export function useCoachingWorkspace() {
   });
   const [streamError, setStreamError] = useState<string | null>(null);
   const streamController = useRef<AbortController | null>(null);
+  const pendingResponseTokens = useRef("");
+  const responseFrame = useRef<number | null>(null);
   const draftKey = activeConversationId ?? NEW_SESSION_KEY;
   const draft = drafts[draftKey] ?? "";
+  const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const activeConversation = useMemo(
     () =>
@@ -69,17 +95,27 @@ export function useCoachingWorkspace() {
   );
 
   const filteredConversations = useMemo(() => {
-    const query = searchQuery.trim().toLocaleLowerCase();
+    const query = deferredSearchQuery.trim().toLocaleLowerCase();
     if (!query) return conversationsQuery.data ?? [];
 
     return (conversationsQuery.data ?? []).filter((conversation) =>
       conversation.title.toLocaleLowerCase().includes(query),
     );
-  }, [conversationsQuery.data, searchQuery]);
+  }, [conversationsQuery.data, deferredSearchQuery]);
 
   const isStreaming =
     submissionState.status === "sending" ||
     submissionState.status === "streaming";
+
+  useEffect(
+    () => () => {
+      streamController.current?.abort();
+      if (responseFrame.current !== null) {
+        cancelAnimationFrame(responseFrame.current);
+      }
+    },
+    [],
+  );
 
   function setDraft(value: string) {
     setDrafts((currentDrafts) => ({
@@ -135,7 +171,7 @@ export function useCoachingWorkspace() {
         setDraft(submissionState.draftSnapshot);
         setSubmissionState({
           draftSnapshot: submissionState.draftSnapshot,
-          status: "failed-before-accepted",
+          status: "failed-before-response",
         });
       }
     }
@@ -165,6 +201,10 @@ export function useCoachingWorkspace() {
     await navigator.clipboard.writeText(submissionState.draftSnapshot);
   }
 
+  function stopGenerating() {
+    streamController.current?.abort();
+  }
+
   async function sendMessage() {
     const content = draft.trim();
     if (
@@ -191,7 +231,7 @@ export function useCoachingWorkspace() {
       role: "assistant",
     };
     const controller = new AbortController();
-    let requestAccepted = false;
+    pendingResponseTokens.current = "";
     let receivedToken = false;
     let completion:
       | {
@@ -200,6 +240,20 @@ export function useCoachingWorkspace() {
           userMessageId: string;
         }
       | undefined;
+
+    function flushResponseTokens() {
+      const tokens = pendingResponseTokens.current;
+      if (!tokens) return;
+
+      pendingResponseTokens.current = "";
+      setOptimisticMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.id === assistantMessage.id
+            ? { ...message, content: `${message.content}${tokens}` }
+            : message,
+        ),
+      );
+    }
 
     streamController.current = controller;
     setSubmissionState({ draftSnapshot: content, status: "sending" });
@@ -211,7 +265,6 @@ export function useCoachingWorkspace() {
         { conversationId, message: content, stream: true },
         {
           onAccepted: () => {
-            requestAccepted = true;
             setDrafts((currentDrafts) => ({
               ...currentDrafts,
               [submissionDraftKey]: "",
@@ -219,57 +272,93 @@ export function useCoachingWorkspace() {
             setSubmissionState({
               conversationId,
               draftSnapshot: content,
+              stage: "accepted",
               status: "streaming",
             });
           },
           onDone: (event) => {
             completion = event;
           },
+          onStatus: (stage) => {
+            setSubmissionState((currentState) => {
+              if (
+                currentState.status !== "sending" &&
+                currentState.status !== "streaming"
+              ) {
+                return currentState;
+              }
+
+              return {
+                conversationId,
+                draftSnapshot: content,
+                stage,
+                status: "streaming",
+              };
+            });
+          },
           onToken: (token) => {
             receivedToken = true;
-            setOptimisticMessages((currentMessages) =>
-              currentMessages.map((message) =>
-                message.id === assistantMessage.id
-                  ? { ...message, content: `${message.content}${token}` }
-                  : message,
-              ),
-            );
+            pendingResponseTokens.current += token;
+            if (responseFrame.current === null) {
+              responseFrame.current = requestAnimationFrame(() => {
+                responseFrame.current = null;
+                flushResponseTokens();
+              });
+            }
           },
         },
         controller.signal,
       );
+
+      if (responseFrame.current !== null) {
+        cancelAnimationFrame(responseFrame.current);
+        responseFrame.current = null;
+      }
+      flushResponseTokens();
 
       const persistedCompletion = completion;
       if (!persistedCompletion) {
         throw new Error("The response ended before it was saved");
       }
 
-      await Promise.all([
+      setOptimisticMessages([]);
+      setSubmissionState({ status: "completed" });
+      router.replace(`/coaching/${persistedCompletion.conversationId}`);
+      void Promise.all([
         queryClient.invalidateQueries({ queryKey: chatKeys.conversations }),
         queryClient.invalidateQueries({
           queryKey: chatKeys.messages(persistedCompletion.conversationId),
         }),
-      ]);
-      await queryClient.fetchQuery({
-        queryKey: chatKeys.messages(persistedCompletion.conversationId),
-        queryFn: () =>
-          getConversationMessages(persistedCompletion.conversationId),
-        staleTime: 0,
-      });
-      setOptimisticMessages([]);
-      setSubmissionState({ status: "completed" });
-      router.replace(`/coaching/${persistedCompletion.conversationId}`);
+      ])
+        .then(() =>
+          queryClient.prefetchQuery({
+            queryKey: chatKeys.messages(persistedCompletion.conversationId),
+            queryFn: () =>
+              getConversationMessages(persistedCompletion.conversationId),
+            staleTime: 0,
+          }),
+        )
+        .catch(() => undefined);
       return true;
     } catch (error) {
-      if (requestAccepted || receivedToken || controller.signal.aborted) {
+      if (responseFrame.current !== null) {
+        cancelAnimationFrame(responseFrame.current);
+        responseFrame.current = null;
+      }
+      flushResponseTokens();
+      const recovery = getStreamFailureRecovery({
+        error,
+        hasReceivedToken: receivedToken,
+        isAborted: controller.signal.aborted,
+      });
+
+      if (recovery.preservePartialResponse) {
         setSubmissionState({
           conversationId,
           draftSnapshot: content,
           status: "outcome-unknown",
         });
-        setStreamError(
-          "The connection was interrupted. Jess may have saved part of this exchange.",
-        );
+        setStreamError(recovery.errorMessage);
       } else {
         setOptimisticMessages([]);
         setDrafts((currentDrafts) => ({
@@ -278,9 +367,9 @@ export function useCoachingWorkspace() {
         }));
         setSubmissionState({
           draftSnapshot: content,
-          status: "failed-before-accepted",
+          status: "failed-before-response",
         });
-        setStreamError(getErrorMessage(error));
+        setStreamError(recovery.errorMessage);
       }
       return false;
     } finally {
@@ -323,7 +412,9 @@ export function useCoachingWorkspace() {
     setDraft,
     setSearchQuery,
     streamError,
+    stopGenerating,
     submissionState,
     toggleSearch,
+    conversationCount: conversationsQuery.data?.length ?? 0,
   };
 }

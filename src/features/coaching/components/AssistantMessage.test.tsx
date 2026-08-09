@@ -37,10 +37,17 @@ describe("AssistantMessage", () => {
     );
   });
 
-  it("keeps streaming content as plain text", () => {
+  it("renders streaming content with the same safe markdown pipeline", () => {
     render(<AssistantMessage content={"**Still streaming"} isStreaming />);
 
-    expect(screen.getByText("**Still streaming")).toBeInTheDocument();
-    expect(screen.queryByRole("strong")).not.toBeInTheDocument();
+    expect(screen.getByTestId("markdown")).toHaveTextContent("Still streaming");
+    expect(mockedReactMarkdown).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        rehypePlugins: expect.any(Array),
+        remarkPlugins: expect.any(Array),
+        skipHtml: true,
+      }),
+      undefined,
+    );
   });
 });

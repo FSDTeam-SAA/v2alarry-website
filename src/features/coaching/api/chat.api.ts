@@ -3,7 +3,11 @@ import { z } from "zod";
 
 import { api } from "@/lib/api";
 
-import type { CoachingConversation, CoachingMessage } from "../types";
+import type {
+  CoachingConversation,
+  CoachingMessage,
+  CoachingStreamStage,
+} from "../types";
 
 const conversationSchema = z.object({
   created_at: z.string(),
@@ -21,6 +25,15 @@ const messageSchema = z.object({
 });
 
 const streamEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    status: z.enum([
+      "accepted",
+      "retrieving_context",
+      "building_context",
+      "generating_response",
+    ]),
+    type: z.literal("status"),
+  }),
   z.object({ content: z.string(), type: z.literal("token") }),
   z.object({
     assistant_message_id: z.string().min(1),
@@ -45,6 +58,7 @@ type StreamChatHandlers = {
     conversationId: string;
     userMessageId: string;
   }) => void;
+  onStatus?: (status: CoachingStreamStage) => void;
   onToken: (token: string) => void;
 };
 
@@ -156,7 +170,9 @@ export async function streamChat(
         throw new Error("The chat stream returned an invalid event");
       }
 
-      if (event.data.type === "token") {
+      if (event.data.type === "status") {
+        handlers.onStatus?.(event.data.status);
+      } else if (event.data.type === "token") {
         handlers.onToken(event.data.content);
       } else if (event.data.type === "done") {
         handlers.onDone({

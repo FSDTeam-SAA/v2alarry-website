@@ -20,6 +20,7 @@ describe("CoachingWorkspace", () => {
       activeTitle: "Leading Through Change",
       accountName: "Test Person",
       conversationsError: false,
+      conversationCount: 1,
       copySubmittedMessage: jest.fn().mockResolvedValue(undefined),
       createNewSession: jest.fn(),
       draft: "",
@@ -57,6 +58,7 @@ describe("CoachingWorkspace", () => {
       setDraft: jest.fn(),
       setSearchQuery: jest.fn(),
       streamError: null,
+      stopGenerating: jest.fn(),
       submissionState: { status: "idle" },
       toggleSearch: jest.fn(),
     });

@@ -11,12 +11,9 @@ export function AssistantMessage({
   content,
   isStreaming,
 }: AssistantMessageProps) {
-  if (isStreaming) {
-    return <p className="coaching-message-plain">{content}</p>;
-  }
-
   return (
     <ReactMarkdown
+      data-streaming={isStreaming || undefined}
       components={{
         a: ({ children, ...props }) => (
           <a {...props} rel="noreferrer noopener" target="_blank">

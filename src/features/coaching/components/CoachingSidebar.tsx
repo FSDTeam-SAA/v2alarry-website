@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { KeyboardEvent, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { Plus, Search, Trash2, X } from "lucide-react";
 
@@ -19,6 +19,7 @@ import type { CoachingConversation } from "../types";
 type CoachingSidebarProps = {
   activeConversationId: string | null;
   accountName: string;
+  conversationCount: number;
   conversationsError: boolean;
   filteredConversations: CoachingConversation[];
   isDeletingConversation: boolean;
@@ -62,9 +63,34 @@ function groupConversations(conversations: CoachingConversation[]) {
   return Array.from(groups).filter(([, items]) => items.length > 0);
 }
 
+function HighlightedConversationTitle({
+  title,
+  query,
+}: {
+  title: string;
+  query: string;
+}) {
+  const searchTerm = query.trim();
+  const matchIndex = title
+    .toLocaleLowerCase()
+    .indexOf(searchTerm.toLocaleLowerCase());
+
+  if (!searchTerm || matchIndex === -1) return title;
+
+  const matchEnd = matchIndex + searchTerm.length;
+  return (
+    <>
+      {title.slice(0, matchIndex)}
+      <mark>{title.slice(matchIndex, matchEnd)}</mark>
+      {title.slice(matchEnd)}
+    </>
+  );
+}
+
 export function CoachingSidebar({
   activeConversationId,
   accountName,
+  conversationCount,
   conversationsError,
   filteredConversations,
   isDeletingConversation,
@@ -80,13 +106,41 @@ export function CoachingSidebar({
 }: CoachingSidebarProps) {
   const [conversationToDelete, setConversationToDelete] =
     useState<CoachingConversation | null>(null);
+  const searchTriggerRef = useRef<HTMLButtonElement>(null);
+  const firstSearchResultRef = useRef<HTMLButtonElement>(null);
   const historyTitle = isSearchOpen ? "Search sessions" : "Coaching History";
-  const conversationGroups = groupConversations(filteredConversations);
+  const conversationGroups = useMemo(
+    () => groupConversations(filteredConversations),
+    [filteredConversations],
+  );
+  const searchSummary = isSearchOpen
+    ? searchQuery
+      ? `${filteredConversations.length} of ${conversationCount} saved sessions match your search.`
+      : `${conversationCount} saved sessions. Search by title to narrow results.`
+    : null;
 
   async function confirmDelete() {
     if (!conversationToDelete) return;
     await onDeleteConversation(conversationToDelete.id);
     setConversationToDelete(null);
+  }
+
+  function closeSearch() {
+    searchTriggerRef.current?.focus();
+    onToggleSearch();
+  }
+
+  function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeSearch();
+      return;
+    }
+
+    if (event.key === "ArrowDown" && filteredConversations.length > 0) {
+      event.preventDefault();
+      firstSearchResultRef.current?.focus();
+    }
   }
 
   return (
@@ -113,9 +167,11 @@ export function CoachingSidebar({
             <span>New Coaching Session</span>
           </button>
           <button
+            aria-controls="coaching-history"
             aria-expanded={isSearchOpen}
             className="coaching-nav-button"
             onClick={onToggleSearch}
+            ref={searchTriggerRef}
             type="button"
           >
             <Search aria-hidden="true" size={24} />
@@ -124,100 +180,124 @@ export function CoachingSidebar({
         </nav>
         <section
           className={`coaching-history${isSearchOpen ? " coaching-history-search" : ""}`}
+          id="coaching-history"
           aria-labelledby="coaching-history-title"
         >
-          <h2 id="coaching-history-title">{historyTitle}</h2>
-          {isSearchOpen ? (
-            <div className="coaching-search-field">
-              <label className="sr-only" htmlFor="session-search">
-                Search session titles
-              </label>
-              <Search aria-hidden="true" size={16} />
-              <input
-                autoFocus
-                id="session-search"
-                onChange={(event) => onSearchQueryChange(event.target.value)}
-                onKeyDown={(event) =>
-                  event.key === "Escape" && onToggleSearch()
-                }
-                placeholder="Search session titles"
-                type="search"
-                value={searchQuery}
-              />
-              <button
-                aria-label="Close session search"
-                onClick={onToggleSearch}
-                type="button"
+          <div className="coaching-history-heading">
+            <h2 id="coaching-history-title">{historyTitle}</h2>
+            {isSearchOpen ? (
+              <>
+                <div className="coaching-search-field">
+                  <label className="sr-only" htmlFor="session-search">
+                    Search session titles
+                  </label>
+                  <Search aria-hidden="true" size={16} />
+                  <input
+                    autoFocus
+                    id="session-search"
+                    onChange={(event) =>
+                      onSearchQueryChange(event.target.value)
+                    }
+                    onKeyDown={handleSearchKeyDown}
+                    placeholder="Search session titles"
+                    type="search"
+                    value={searchQuery}
+                  />
+                  <button
+                    aria-label="Close session search"
+                    onClick={closeSearch}
+                    type="button"
+                  >
+                    <X aria-hidden="true" size={16} />
+                  </button>
+                </div>
+                {searchSummary ? (
+                  <p className="coaching-search-summary" role="status">
+                    {searchSummary}
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+          <div className="coaching-history-results">
+            {isHistoryLoading ? (
+              <div
+                aria-busy="true"
+                aria-label="Loading coaching history"
+                className="coaching-history-skeletons"
               >
-                <X aria-hidden="true" size={16} />
-              </button>
-            </div>
-          ) : null}
-          {isHistoryLoading ? (
-            <div
-              aria-busy="true"
-              aria-label="Loading coaching history"
-              className="coaching-history-skeletons"
-            >
-              <span />
-              <span />
-              <span />
-            </div>
-          ) : null}
-          {conversationsError ? (
-            <p className="coaching-search-empty" role="alert">
-              Unable to load coaching history. Refresh the page to try again.
-            </p>
-          ) : null}
-          {!isHistoryLoading &&
-          !conversationsError &&
-          filteredConversations.length > 0
-            ? conversationGroups.map(([groupName, conversations]) => (
-                <section className="coaching-history-group" key={groupName}>
-                  <h3>{groupName}</h3>
-                  <ul>
-                    {conversations.map((conversation) => (
-                      <li
-                        className="coaching-history-row"
-                        key={conversation.id}
-                      >
-                        <button
-                          aria-current={
-                            activeConversationId === conversation.id
-                              ? "page"
-                              : undefined
-                          }
-                          className={`coaching-history-item${activeConversationId === conversation.id ? " coaching-history-item-active" : ""}`}
-                          onClick={() => onSelectSession(conversation.id)}
-                          title={conversation.title}
-                          type="button"
+                <span />
+                <span />
+                <span />
+              </div>
+            ) : null}
+            {conversationsError ? (
+              <p className="coaching-search-empty" role="alert">
+                Unable to load coaching history. Refresh the page to try again.
+              </p>
+            ) : null}
+            {!isHistoryLoading &&
+            !conversationsError &&
+            filteredConversations.length > 0
+              ? conversationGroups.map(([groupName, conversations]) => (
+                  <section className="coaching-history-group" key={groupName}>
+                    <h3>{groupName}</h3>
+                    <ul>
+                      {conversations.map((conversation) => (
+                        <li
+                          className="coaching-history-row"
+                          key={conversation.id}
                         >
-                          <span>{conversation.title}</span>
-                        </button>
-                        <button
-                          aria-label={`Delete session: ${conversation.title}`}
-                          className="coaching-history-delete"
-                          disabled={isStreaming}
-                          onClick={() => setConversationToDelete(conversation)}
-                          type="button"
-                        >
-                          <Trash2 aria-hidden="true" size={16} />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ))
-            : null}
-          {!isHistoryLoading &&
-          !conversationsError &&
-          filteredConversations.length === 0 ? (
-            <p className="coaching-search-empty" role="status">
-              {searchQuery
-                ? `No session titles match “${searchQuery}”.`
-                : "No coaching sessions yet."}
-            </p>
-          ) : null}
+                          <button
+                            aria-current={
+                              activeConversationId === conversation.id
+                                ? "page"
+                                : undefined
+                            }
+                            className={`coaching-history-item${activeConversationId === conversation.id ? " coaching-history-item-active" : ""}`}
+                            onClick={() => onSelectSession(conversation.id)}
+                            ref={
+                              conversation.id === filteredConversations[0]?.id
+                                ? firstSearchResultRef
+                                : undefined
+                            }
+                            title={conversation.title}
+                            type="button"
+                          >
+                            <span>
+                              <HighlightedConversationTitle
+                                query={searchQuery}
+                                title={conversation.title}
+                              />
+                            </span>
+                          </button>
+                          <button
+                            aria-label={`Delete session: ${conversation.title}`}
+                            className="coaching-history-delete"
+                            disabled={isStreaming}
+                            onClick={() =>
+                              setConversationToDelete(conversation)
+                            }
+                            type="button"
+                          >
+                            <Trash2 aria-hidden="true" size={16} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))
+              : null}
+            {!isHistoryLoading &&
+            !conversationsError &&
+            filteredConversations.length === 0 ? (
+              <p className="coaching-search-empty" role="status">
+                {searchQuery
+                  ? `No session titles match “${searchQuery}”.`
+                  : "No coaching sessions yet."}
+              </p>
+            ) : null}
+          </div>
         </section>
       </div>
       <Dialog>

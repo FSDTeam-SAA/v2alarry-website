@@ -1,6 +1,13 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import {
+  FormEvent,
+  KeyboardEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { ArrowRight, ChevronDown, LoaderCircle, RefreshCw } from "lucide-react";
 
 import {
@@ -18,10 +25,12 @@ import { AssistantMessage } from "./AssistantMessage";
 import type {
   CoachingMessage,
   CoachingStarter,
+  CoachingStreamStage,
   SubmissionState,
 } from "../types";
 
 type CoachingConversationProps = {
+  activeConversationId: string | null;
   activeTitle: string;
   canRefreshConversation: boolean;
   copySubmittedMessage: () => Promise<void>;
@@ -35,6 +44,7 @@ type CoachingConversationProps = {
   onDraftChange: (value: string) => void;
   onRefreshConversation: () => Promise<void>;
   onSendMessage: () => Promise<boolean>;
+  onStopGenerating: () => void;
   onUsePrompt: (prompt: string) => void;
   starters: readonly CoachingStarter[];
   streamError: string | null;
@@ -42,15 +52,46 @@ type CoachingConversationProps = {
 };
 
 function getStreamStatus(submissionState: SubmissionState) {
-  if (submissionState.status === "sending") return "Sending message…";
+  if (submissionState.status === "sending") return "Sending your message…";
   if (submissionState.status === "streaming") {
-    return "Jess is preparing a response…";
+    return "Jess is responding…";
   }
-  if (submissionState.status === "completed") return "Jess has responded.";
   return "";
 }
 
+function getPreparationMessage(stage: CoachingStreamStage | undefined) {
+  switch (stage) {
+    case "retrieving_context":
+      return "Reviewing relevant context…";
+    case "building_context":
+      return "Preparing your response…";
+    case "generating_response":
+      return "Starting your response…";
+    case "accepted":
+    default:
+      return "Understanding your question…";
+  }
+}
+
+function ResponsePreparation({ stage }: { stage?: CoachingStreamStage }) {
+  const message = getPreparationMessage(stage);
+
+  return (
+    <p className="coaching-response-preparation" role="status">
+      <span aria-hidden="true" className="coaching-response-dots">
+        <i />
+        <i />
+        <i />
+      </span>
+      <span className="coaching-response-preparation-label" key={stage}>
+        {message}
+      </span>
+    </p>
+  );
+}
+
 export function CoachingConversation({
+  activeConversationId,
   activeTitle,
   canRefreshConversation,
   copySubmittedMessage,
@@ -64,6 +105,7 @@ export function CoachingConversation({
   onDraftChange,
   onRefreshConversation,
   onSendMessage,
+  onStopGenerating,
   onUsePrompt,
   starters,
   streamError,
@@ -74,24 +116,73 @@ export function CoachingConversation({
   const [showAllStarters, setShowAllStarters] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+  const activeConversationRef = useRef<string | null>(activeConversationId);
+  const previousMessageRevisionRef = useRef("");
+  const scrollStateFrameRef = useRef<number | null>(null);
   const displayedStarters = showAllStarters ? starters : starters.slice(0, 3);
   const completedMessages = messages.filter((message) => !message.isStreaming);
   const streamingMessage = messages.find((message) => message.isStreaming);
   const statusText = getStreamStatus(submissionState);
+  const hasStreamingContent = Boolean(streamingMessage?.content);
+  const isPreparingResponse = isStreaming && !hasStreamingContent;
+  const shouldShowStreamingMessage =
+    Boolean(streamingMessage) && (isStreaming || hasStreamingContent);
+  const messageRevision = messages
+    .map((message) => `${message.id}:${message.content.length}`)
+    .join("|");
+
+  useLayoutEffect(() => {
+    const textarea = textAreaRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 240)}px`;
+  }, [draft]);
 
   useEffect(() => {
     const messageLog = messageLogRef.current;
     if (!messageLog || !hasActiveConversation) return;
 
+    const conversationChanged =
+      activeConversationRef.current !== activeConversationId;
+    if (conversationChanged) {
+      activeConversationRef.current = activeConversationId;
+      previousMessageRevisionRef.current = "";
+      scrollStateFrameRef.current = requestAnimationFrame(() => {
+        scrollStateFrameRef.current = null;
+        setIsNearBottom(true);
+        setHasUnreadMessages(false);
+      });
+    }
+
+    const hasPreviousMessages = Boolean(previousMessageRevisionRef.current);
+    const hasNewMessages =
+      hasPreviousMessages &&
+      previousMessageRevisionRef.current !== messageRevision;
+    previousMessageRevisionRef.current = messageRevision;
+
     if (isNearBottom) {
       if (typeof messageLog.scrollTo === "function") {
-        messageLog.scrollTo({
-          top: messageLog.scrollHeight,
-          behavior: "smooth",
-        });
+        messageLog.scrollTo({ top: messageLog.scrollHeight, behavior: "auto" });
       }
+    } else if (hasNewMessages) {
+      scrollStateFrameRef.current = requestAnimationFrame(() => {
+        scrollStateFrameRef.current = null;
+        setHasUnreadMessages(true);
+      });
     }
-  }, [hasActiveConversation, isNearBottom, messages]);
+  }, [
+    activeConversationId,
+    hasActiveConversation,
+    isNearBottom,
+    messageRevision,
+  ]);
+
+  useEffect(() => () => {
+    if (scrollStateFrameRef.current !== null) {
+      cancelAnimationFrame(scrollStateFrameRef.current);
+    }
+  });
 
   function handleScroll() {
     const messageLog = messageLogRef.current;
@@ -99,12 +190,18 @@ export function CoachingConversation({
     const isAtBottom =
       messageLog.scrollHeight - messageLog.scrollTop - messageLog.clientHeight <
       40;
-    setIsNearBottom(isAtBottom);
-    setHasUnreadMessages(!isAtBottom);
+    setIsNearBottom((current) =>
+      current === isAtBottom ? current : isAtBottom,
+    );
+    if (isAtBottom) {
+      setHasUnreadMessages(false);
+    }
   }
 
   function jumpToLatest() {
     if (typeof messageLogRef.current?.scrollTo !== "function") return;
+    setIsNearBottom(true);
+    setHasUnreadMessages(false);
     messageLogRef.current.scrollTo({
       top: messageLogRef.current.scrollHeight,
       behavior: "smooth",
@@ -118,6 +215,7 @@ export function CoachingConversation({
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
+      if (isStreaming) return;
       event.preventDefault();
       void onSendMessage();
     }
@@ -195,16 +293,26 @@ export function CoachingConversation({
                   )}
                 </article>
               ))}
-              {streamingMessage ? (
+              {shouldShowStreamingMessage && streamingMessage ? (
                 <article
                   aria-live="off"
                   className="coaching-message coaching-message-assistant coaching-message-streaming"
                 >
                   <span className="coaching-message-author">Jess</span>
-                  <AssistantMessage
-                    content={streamingMessage.content}
-                    isStreaming
-                  />
+                  {isPreparingResponse ? (
+                    <ResponsePreparation
+                      stage={
+                        submissionState.status === "streaming"
+                          ? submissionState.stage
+                          : undefined
+                      }
+                    />
+                  ) : (
+                    <AssistantMessage
+                      content={streamingMessage.content}
+                      isStreaming={isStreaming}
+                    />
+                  )}
                 </article>
               ) : null}
             </div>
@@ -241,9 +349,10 @@ export function CoachingConversation({
             What would you like to explore?
           </label>
           <textarea
-            disabled={
-              isStreaming || submissionState.status === "outcome-unknown"
+            aria-describedby={
+              isStreaming ? "coaching-streaming-note" : undefined
             }
+            disabled={submissionState.status === "outcome-unknown"}
             id="coaching-message"
             onChange={(event) => onDraftChange(event.target.value)}
             onKeyDown={handleKeyDown}
@@ -255,9 +364,28 @@ export function CoachingConversation({
           <div className="coaching-composer-footer">
             <div className="coaching-composer-actions">
               <span>Saved to your account</span>
+              {isStreaming ? (
+                <>
+                  <span
+                    className="coaching-streaming-note"
+                    id="coaching-streaming-note"
+                  >
+                    Draft your next message while Jess responds.
+                  </span>
+                  <button
+                    onClick={onStopGenerating}
+                    type="button"
+                    className="border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-colors"
+                  >
+                    Stop
+                  </button>
+                </>
+              ) : null}
               <Dialog>
                 <DialogTrigger asChild>
-                  <button type="button">About Jess Mode</button>
+                  <button type="button" className="cursor-help">
+                    About Jess Mode
+                  </button>
                 </DialogTrigger>
                 <DialogContent className="coaching-account-dialog">
                   <DialogHeader>

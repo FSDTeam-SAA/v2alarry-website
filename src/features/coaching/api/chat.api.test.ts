@@ -22,11 +22,14 @@ describe("streamChat", () => {
     const encoder = new TextEncoder();
     const onToken = jest.fn();
     const onDone = jest.fn();
+    const onStatus = jest.fn();
     const response = {
       body: new ReadableStream({
         start(controller) {
           controller.enqueue(
-            encoder.encode('data: {"type":"token","content":"Hel'),
+            encoder.encode(
+              'data: {"type":"status","status":"retrieving_context"}\n\ndata: {"type":"token","content":"Hel',
+            ),
           );
           controller.enqueue(
             encoder.encode(
@@ -41,8 +44,12 @@ describe("streamChat", () => {
     const fetchMock = jest.fn().mockResolvedValue(response);
     global.fetch = fetchMock;
 
-    await streamChat({ message: "Hello", stream: true }, { onDone, onToken });
+    await streamChat(
+      { message: "Hello", stream: true },
+      { onDone, onStatus, onToken },
+    );
 
+    expect(onStatus).toHaveBeenCalledWith("retrieving_context");
     expect(onToken).toHaveBeenCalledWith("Hello");
     expect(onDone).toHaveBeenCalledWith({
       conversationId: "conversation-1",
@@ -57,6 +64,33 @@ describe("streamChat", () => {
         }),
         method: "POST",
       }),
+    );
+  });
+
+  it("surfaces the server's safe stream error", async () => {
+    const encoder = new TextEncoder();
+    const response = {
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            encoder.encode(
+              'data: {"type":"error","content":"The chat service is temporarily unavailable. Please try again."}\n\n',
+            ),
+          );
+          controller.close();
+        },
+      }),
+      ok: true,
+    } as unknown as Response;
+    global.fetch = jest.fn().mockResolvedValue(response);
+
+    await expect(
+      streamChat(
+        { message: "Hello", stream: true },
+        { onDone: jest.fn(), onToken: jest.fn() },
+      ),
+    ).rejects.toThrow(
+      "The chat service is temporarily unavailable. Please try again.",
     );
   });
 });
