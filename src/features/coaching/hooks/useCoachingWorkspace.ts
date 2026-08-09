@@ -16,6 +16,16 @@ import {
 
 const NEW_SESSION_KEY = "new";
 
+type OptimisticCoachingMessage = CoachingMessage & {
+  persistedId?: string;
+};
+
+type StreamCompletion = {
+  assistantMessageId: string;
+  conversationId: string;
+  userMessageId: string;
+};
+
 function createTemporaryId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -54,6 +64,46 @@ function getGreetingName(name: string | null | undefined) {
   return trimmedName ? trimmedName.split(/\s+/u)[0] : null;
 }
 
+function toCoachingMessage(
+  message: OptimisticCoachingMessage,
+): CoachingMessage {
+  const { persistedId, ...coachingMessage } = message;
+  void persistedId;
+  return coachingMessage;
+}
+
+function mergeMessages(
+  persistedMessages: CoachingMessage[],
+  optimisticMessages: OptimisticCoachingMessage[],
+): CoachingMessage[] {
+  const persistedIds = new Set(persistedMessages.map((message) => message.id));
+
+  return [
+    ...persistedMessages,
+    ...optimisticMessages
+      .filter(
+        (message) =>
+          !message.persistedId || !persistedIds.has(message.persistedId),
+      )
+      .map(toCoachingMessage),
+  ];
+}
+
+function mergePersistedMessages(
+  cachedMessages: CoachingMessage[] | undefined,
+  completedMessages: CoachingMessage[],
+) {
+  const messagesById = new Map(
+    (cachedMessages ?? []).map((message) => [message.id, message]),
+  );
+
+  for (const message of completedMessages) {
+    messagesById.set(message.id, message);
+  }
+
+  return [...messagesById.values()];
+}
+
 export function useCoachingWorkspace() {
   const router = useRouter();
   const params = useParams<{ conversationId?: string | string[] }>();
@@ -68,7 +118,7 @@ export function useCoachingWorkspace() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [optimisticMessages, setOptimisticMessages] = useState<
-    CoachingMessage[]
+    OptimisticCoachingMessage[]
   >([]);
   const [submissionState, setSubmissionState] = useState<SubmissionState>({
     status: "idle",
@@ -90,7 +140,7 @@ export function useCoachingWorkspace() {
   );
 
   const messages = useMemo(
-    () => [...(messagesQuery.data ?? []), ...optimisticMessages],
+    () => mergeMessages(messagesQuery.data ?? [], optimisticMessages),
     [messagesQuery.data, optimisticMessages],
   );
 
@@ -233,13 +283,8 @@ export function useCoachingWorkspace() {
     const controller = new AbortController();
     pendingResponseTokens.current = "";
     let receivedToken = false;
-    let completion:
-      | {
-          assistantMessageId: string;
-          conversationId: string;
-          userMessageId: string;
-        }
-      | undefined;
+    let streamedResponse = "";
+    let completion: StreamCompletion | undefined;
 
     function flushResponseTokens() {
       const tokens = pendingResponseTokens.current;
@@ -298,6 +343,7 @@ export function useCoachingWorkspace() {
           },
           onToken: (token) => {
             receivedToken = true;
+            streamedResponse += token;
             pendingResponseTokens.current += token;
             if (responseFrame.current === null) {
               responseFrame.current = requestAnimationFrame(() => {
@@ -321,23 +367,54 @@ export function useCoachingWorkspace() {
         throw new Error("The response ended before it was saved");
       }
 
-      setOptimisticMessages([]);
+      const finalizedMessages: OptimisticCoachingMessage[] = [
+        {
+          ...userMessage,
+          persistedId: persistedCompletion.userMessageId,
+        },
+        {
+          ...assistantMessage,
+          content: streamedResponse,
+          isStreaming: false,
+          persistedId: persistedCompletion.assistantMessageId,
+        },
+      ];
+      const completedPersistedMessages = finalizedMessages.map((message) => ({
+        ...toCoachingMessage(message),
+        id: message.persistedId ?? message.id,
+      }));
+
+      setOptimisticMessages(finalizedMessages);
+      queryClient.setQueryData<CoachingMessage[]>(
+        chatKeys.messages(persistedCompletion.conversationId),
+        (cachedMessages) =>
+          mergePersistedMessages(cachedMessages, completedPersistedMessages),
+      );
       setSubmissionState({ status: "completed" });
+
+      const historyRefresh = queryClient.fetchQuery({
+        queryKey: chatKeys.messages(persistedCompletion.conversationId),
+        queryFn: () =>
+          getConversationMessages(persistedCompletion.conversationId),
+        staleTime: 0,
+      });
+
       router.replace(`/coaching/${persistedCompletion.conversationId}`);
-      void Promise.all([
-        queryClient.invalidateQueries({ queryKey: chatKeys.conversations }),
-        queryClient.invalidateQueries({
-          queryKey: chatKeys.messages(persistedCompletion.conversationId),
-        }),
-      ])
-        .then(() =>
-          queryClient.prefetchQuery({
-            queryKey: chatKeys.messages(persistedCompletion.conversationId),
-            queryFn: () =>
-              getConversationMessages(persistedCompletion.conversationId),
-            staleTime: 0,
-          }),
-        )
+      void queryClient
+        .invalidateQueries({ queryKey: chatKeys.conversations })
+        .catch(() => undefined);
+      void historyRefresh
+        .then((persistedMessages) => {
+          const persistedIds = new Set(
+            persistedMessages.map((message) => message.id),
+          );
+          setOptimisticMessages((currentMessages) =>
+            currentMessages.filter(
+              (message) =>
+                !message.persistedId || !persistedIds.has(message.persistedId),
+            ),
+          );
+        })
         .catch(() => undefined);
       return true;
     } catch (error) {

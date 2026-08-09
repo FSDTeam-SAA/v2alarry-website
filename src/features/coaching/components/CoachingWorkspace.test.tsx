@@ -69,6 +69,9 @@ describe("CoachingWorkspace", () => {
 
     expect(screen.getByText("Leadership coaching session")).toBeInTheDocument();
     expect(screen.getByText("Saved to your account")).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Leading Through Change" }),
+    ).not.toHaveClass("coaching-panel-processing");
   });
 
   it("requires confirmation before deleting a conversation", async () => {

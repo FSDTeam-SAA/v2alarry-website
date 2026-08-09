@@ -7,11 +7,13 @@ import {
   getStreamFailureRecovery,
   useCoachingWorkspace,
 } from "./useCoachingWorkspace";
+import { chatKeys } from "./useChat";
 
 const replace = jest.fn();
+let mockActiveConversationId: string | undefined = "conversation-1";
 
 jest.mock("next/navigation", () => ({
-  useParams: () => ({ conversationId: "conversation-1" }),
+  useParams: () => ({ conversationId: mockActiveConversationId }),
   useRouter: () => ({ push: jest.fn(), replace }),
 }));
 
@@ -49,24 +51,31 @@ jest.mock("./useChat", () => ({
 const mockedGetConversationMessages = jest.mocked(getConversationMessages);
 const mockedStreamChat = jest.mocked(streamChat);
 
-function createWrapper() {
+function createTestHarness() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
 
-  return function Wrapper({ children }: PropsWithChildren) {
+  function Wrapper({ children }: PropsWithChildren) {
     return createElement(
       QueryClientProvider,
       { client: queryClient },
       children,
     );
-  };
+  }
+
+  return { queryClient, Wrapper };
+}
+
+function createWrapper() {
+  return createTestHarness().Wrapper;
 }
 
 describe("getStreamFailureRecovery", () => {
   beforeEach(() => {
     jest.resetAllMocks();
     replace.mockReset();
+    mockActiveConversationId = "conversation-1";
     Object.assign(global, {
       cancelAnimationFrame: jest.fn(),
       requestAnimationFrame: (callback: FrameRequestCallback) => {
@@ -136,6 +145,75 @@ describe("getStreamFailureRecovery", () => {
     expect(sent).toBe(true);
     expect(replace).toHaveBeenCalledWith("/coaching/conversation-1");
     expect(result.current.streamError).toBeNull();
+    expect(result.current.messages).toEqual([
+      expect.objectContaining({ content: "Hello", role: "user" }),
+      expect.objectContaining({
+        content: "Hello",
+        isStreaming: false,
+        role: "assistant",
+      }),
+    ]);
+  });
+
+  it("seeds a completed new conversation before navigating to it", async () => {
+    mockActiveConversationId = undefined;
+    let resolveHistoryRefresh: ((messages: []) => void) | undefined;
+    mockedGetConversationMessages.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveHistoryRefresh = resolve;
+        }),
+    );
+    mockedStreamChat.mockImplementation(async (_input, handlers) => {
+      handlers.onAccepted?.();
+      handlers.onToken("Hello");
+      handlers.onDone({
+        assistantMessageId: "assistant-message-2",
+        conversationId: "conversation-2",
+        userMessageId: "user-message-2",
+      });
+    });
+    const { queryClient, Wrapper } = createTestHarness();
+    const { result, rerender } = renderHook(() => useCoachingWorkspace(), {
+      wrapper: Wrapper,
+    });
+
+    act(() => {
+      result.current.setDraft("Hello");
+    });
+
+    await act(async () => {
+      await result.current.sendMessage();
+    });
+
+    expect(mockedGetConversationMessages).toHaveBeenCalledTimes(1);
+    expect(
+      queryClient.getQueryData(chatKeys.messages("conversation-2")),
+    ).toEqual([
+      expect.objectContaining({
+        content: "Hello",
+        id: "user-message-2",
+        role: "user",
+      }),
+      expect.objectContaining({
+        content: "Hello",
+        id: "assistant-message-2",
+        isStreaming: false,
+        role: "assistant",
+      }),
+    ]);
+
+    mockActiveConversationId = "conversation-2";
+    rerender();
+    expect(result.current.messages).toHaveLength(2);
+    expect(result.current.messages.map((message) => message.content)).toEqual([
+      "Hello",
+      "Hello",
+    ]);
+
+    await act(async () => {
+      resolveHistoryRefresh?.([]);
+    });
   });
 
   it("keeps the active request alive while submission state re-renders", async () => {

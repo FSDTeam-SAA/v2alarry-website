@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ArrowRight, ChevronDown, LoaderCircle, RefreshCw } from "lucide-react";
+import { ArrowRight, ChevronDown, RefreshCw, Square } from "lucide-react";
 
 import {
   Dialog,
@@ -125,6 +125,9 @@ export function CoachingConversation({
   const statusText = getStreamStatus(submissionState);
   const hasStreamingContent = Boolean(streamingMessage?.content);
   const isPreparingResponse = isStreaming && !hasStreamingContent;
+  const composerStatus = isPreparingResponse
+    ? "Jess is preparing your response…"
+    : "Jess is responding…";
   const shouldShowStreamingMessage =
     Boolean(streamingMessage) && (isStreaming || hasStreamingContent);
   const messageRevision = messages
@@ -228,7 +231,7 @@ export function CoachingConversation({
 
   return (
     <section
-      className={`coaching-panel${hasActiveConversation ? " coaching-panel-conversation" : ""}`}
+      className={`coaching-panel${hasActiveConversation ? " coaching-panel-conversation" : ""}${isStreaming ? " coaching-panel-processing" : ""}`}
       aria-labelledby="jess-mode-title"
     >
       <div aria-atomic="true" className="sr-only" role="status">
@@ -344,7 +347,10 @@ export function CoachingConversation({
             <p>Reflect, prepare, and identify a practical next step.</p>
           </div>
         ) : null}
-        <form className="coaching-composer" onSubmit={handleSubmit}>
+        <form
+          className={`coaching-composer${isStreaming ? " coaching-composer-processing" : ""}`}
+          onSubmit={handleSubmit}
+        >
           <label className="sr-only" htmlFor="coaching-message">
             What would you like to explore?
           </label>
@@ -363,61 +369,67 @@ export function CoachingConversation({
           />
           <div className="coaching-composer-footer">
             <div className="coaching-composer-actions">
-              <span>Saved to your account</span>
               {isStreaming ? (
-                <>
+                <p
+                  className="coaching-composer-status"
+                  id="coaching-streaming-note"
+                >
                   <span
-                    className="coaching-streaming-note"
-                    id="coaching-streaming-note"
-                  >
-                    Draft your next message while Jess responds.
+                    aria-hidden="true"
+                    className="coaching-composer-status-indicator"
+                  />
+                  <span className="coaching-composer-status-copy">
+                    {composerStatus}
                   </span>
-                  <button
-                    onClick={onStopGenerating}
-                    type="button"
-                    className="border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-colors"
-                  >
-                    Stop
-                  </button>
-                </>
-              ) : null}
-              <Dialog>
-                <DialogTrigger asChild>
-                  <button type="button" className="cursor-help">
-                    About Jess Mode
-                  </button>
-                </DialogTrigger>
-                <DialogContent className="coaching-account-dialog">
-                  <DialogHeader>
-                    <DialogTitle>About Jess Mode</DialogTitle>
-                    <DialogDescription>
-                      Jess is an AI leadership coaching experience.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <p>
-                    Sessions are saved to your account and can be deleted from
-                    coaching history. Avoid sharing unnecessary sensitive or
-                    identifying information.
-                  </p>
-                </DialogContent>
-              </Dialog>
-            </div>
-            <button
-              aria-label="Send coaching message"
-              className="coaching-send-button"
-              disabled={
-                isStreaming ||
-                submissionState.status === "outcome-unknown" ||
-                !draft.trim()
-              }
-              type="submit"
-            >
-              {isStreaming ? (
-                <LoaderCircle aria-hidden="true" size={20} />
+                </p>
               ) : (
-                <ArrowRight aria-hidden="true" size={24} />
+                <>
+                  <span>Saved to your account</span>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <button type="button" className="cursor-help">
+                        About Jess Mode
+                      </button>
+                    </DialogTrigger>
+                    <DialogContent className="coaching-account-dialog">
+                      <DialogHeader>
+                        <DialogTitle>About Jess Mode</DialogTitle>
+                        <DialogDescription>
+                          Jess is an AI leadership coaching experience.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <p>
+                        Sessions are saved to your account and can be deleted
+                        from coaching history. Avoid sharing unnecessary
+                        sensitive or identifying information.
+                      </p>
+                    </DialogContent>
+                  </Dialog>
+                </>
               )}
-            </button>
+            </div>
+            {isStreaming ? (
+              <button
+                aria-label="Stop generating"
+                className="coaching-stop-button"
+                onClick={onStopGenerating}
+                type="button"
+              >
+                <Square aria-hidden="true" fill="currentColor" size={12} />
+                Stop
+              </button>
+            ) : (
+              <button
+                aria-label="Send coaching message"
+                className="coaching-send-button"
+                disabled={
+                  submissionState.status === "outcome-unknown" || !draft.trim()
+                }
+                type="submit"
+              >
+                <ArrowRight aria-hidden="true" size={24} />
+              </button>
+            )}
           </div>
         </form>
 
