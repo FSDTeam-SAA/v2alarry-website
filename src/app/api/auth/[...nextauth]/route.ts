@@ -101,13 +101,53 @@ const providers: NextAuthOptions["providers"] = [
           }),
         });
 
-        const data = await readBackendTokenResponse(res);
+        if (!res.ok) {
+          throw new Error("Invalid email or password");
+        }
+
+        const data = await res.json();
+
+        if (!data.access_token) {
+          throw new Error("Invalid response from server");
+        }
+
+        const userRes = await fetch(`${getBackendUrl()}/users/me`, {
+          headers: {
+            Authorization: `Bearer ${data.access_token}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!userRes.ok) {
+          throw new Error("Failed to fetch user data");
+        }
+
+        const userData = await userRes.json();
+
+        let exp = Date.now() + 24 * 60 * 60 * 1000;
+        try {
+          const payload = JSON.parse(atob(data.access_token.split(".")[1]));
+          if (payload.exp) {
+            exp = payload.exp * 1000;
+          }
+        } catch (_) {
+          // ignore error decoding jwt
+        }
 
         return {
-          ...toSessionToken(data, ""),
+          id: String(userData.id),
+          name: userData.full_name || userData.email.split("@")[0],
+          email: userData.email,
+          image: "",
+          role: userData.role || "user",
           token: data.access_token,
+          refreshToken: data.refresh_token || "",
+          accessTokenExpires: exp,
         };
-      } catch {
+      } catch (error) {
+        if (error instanceof Error) {
+          throw new Error(error.message);
+        }
         throw new Error("Invalid email or password");
       }
     },
