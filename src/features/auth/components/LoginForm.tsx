@@ -40,7 +40,8 @@ export function LoginForm() {
       return;
     }
 
-    setError("Invalid email or password.");
+    const message = "Invalid email or password.";
+    setError(message);
   }
 
   async function handleGoogleSignIn() {
@@ -51,7 +52,8 @@ export function LoginForm() {
 
     const response = await signIn("google", { callbackUrl, redirect: true });
     if (response?.error) {
-      setError("Unable to start Google sign-in. Please try again.");
+      const message = "Unable to start Google sign-in. Please try again.";
+      setError(message);
       setIsGoogleSubmitting(false);
     }
   }

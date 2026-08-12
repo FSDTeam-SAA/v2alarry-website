@@ -1,5 +1,7 @@
 import axios from "axios";
-import { getSession, signOut } from "next-auth/react";
+import { getSession } from "next-auth/react";
+
+import { notifySessionExpired } from "@/features/auth/lib/session-expiry";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -34,9 +36,9 @@ api.interceptors.response.use(
 
       const session = await getSession();
 
-      // If there's an error in the session (refresh failed), log out
+      // Let the shared session boundary preserve the draft and ask the user to sign in.
       if (session?.error === "RefreshAccessTokenError") {
-        signOut({ callbackUrl: "/login" });
+        notifySessionExpired();
         return Promise.reject(error);
       }
 
@@ -46,6 +48,8 @@ api.interceptors.response.use(
         return api(originalRequest);
       }
     }
+
+    if (error.response?.status === 401) notifySessionExpired();
 
     return Promise.reject(error);
   },

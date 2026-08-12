@@ -63,4 +63,18 @@ describe("LoginForm", () => {
       });
     });
   });
+
+  it("toggles password visibility without clearing the entered password", () => {
+    render(<LoginForm />);
+    const password = screen.getByLabelText("Password");
+
+    fireEvent.change(password, { target: { value: "password123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Show password" }));
+
+    expect(password).toHaveAttribute("type", "text");
+    expect(password).toHaveValue("password123");
+    expect(
+      screen.getByRole("button", { name: "Hide password" }),
+    ).toBeInTheDocument();
+  });
 });

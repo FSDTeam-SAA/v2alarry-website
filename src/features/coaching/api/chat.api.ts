@@ -1,6 +1,8 @@
 import { getSession } from "next-auth/react";
 import { z } from "zod";
 
+import { notifySessionExpired } from "@/features/auth/lib/session-expiry";
+
 import { api } from "@/lib/api";
 
 import type {
@@ -112,6 +114,10 @@ export async function streamChat(
   const session = await getSession();
 
   if (!apiUrl || !session?.accessToken) {
+    if (!apiUrl) {
+      throw new Error("The coaching service is not configured.");
+    }
+    notifySessionExpired();
     throw new Error("Your session has expired. Please sign in again.");
   }
 
@@ -130,6 +136,7 @@ export async function streamChat(
   });
 
   if (!response.ok) {
+    if (response.status === 401) notifySessionExpired();
     const payload: unknown = await response.json().catch(() => null);
     const detail = z.object({ detail: z.string() }).safeParse(payload);
     throw new Error(

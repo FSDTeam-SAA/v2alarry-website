@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { registerUser } from "@/features/auth/api/register.api";
 
 import { AuthDivider } from "./LoginForm";
 import { AuthField } from "./AuthFields";
@@ -19,8 +22,33 @@ function FooterLink({ children, href }: { children: string; href: string }) {
 }
 
 export function SignUpForm() {
+  const router = useRouter();
   const [googleError, setGoogleError] = useState<string>();
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const fullName = String(formData.get("name") ?? "").trim();
+    const email = String(formData.get("email") ?? "").trim();
+    const password = String(formData.get("password") ?? "");
+
+    setIsSubmitting(true);
+    try {
+      await registerUser({ email, fullName, password });
+      toast.success("Account created. You can log in now.");
+      router.push("/login");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to create your account. Please try again.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   async function handleGoogleSignIn() {
     setGoogleError(undefined);
@@ -37,7 +65,7 @@ export function SignUpForm() {
   }
 
   return (
-    <form className="auth-form">
+    <form className="auth-form" onSubmit={handleSubmit}>
       <h1>Create your account</h1>
       <div className="auth-fields">
         <AuthField
@@ -68,8 +96,12 @@ export function SignUpForm() {
           Accept the <Link href="/terms">Terms and Conditions</Link>
         </span>
       </label>
-      <Button className="auth-primary-button" type="button">
-        Sign In
+      <Button
+        className="auth-primary-button"
+        disabled={isSubmitting || isGoogleSubmitting}
+        type="submit"
+      >
+        {isSubmitting ? "Creating account…" : "Create account"}
       </Button>
       <AuthDivider label="Or login with" />
       {googleError ? (
@@ -79,7 +111,7 @@ export function SignUpForm() {
       ) : null}
       <Button
         className="auth-primary-button"
-        disabled={isGoogleSubmitting}
+        disabled={isSubmitting || isGoogleSubmitting}
         onClick={handleGoogleSignIn}
         type="button"
       >
@@ -104,9 +136,12 @@ export function ForgotPasswordForm() {
         placeholder="Your email address"
         type="email"
       />
-      <Button className="auth-primary-button" type="button">
-        Log in
-      </Button>
+      <p className="auth-footer-copy" role="status">
+        Password recovery is not available yet.
+      </p>
+      <Link className="auth-primary-button" href="/login">
+        Return to login
+      </Link>
       <FooterLink href="/signup">Don&apos;t have an account?</FooterLink>
     </form>
   );
@@ -127,12 +162,12 @@ export function OtpForm() {
           />
         ))}
       </div>
-      <Button className="auth-primary-button" type="button">
-        Verify
-      </Button>
-      <p className="auth-footer-copy">
-        Didn&apos;t Receive OTP? <button type="button">Resend OTP</button>
+      <p className="auth-footer-copy" role="status">
+        One-time-password verification is not available yet.
       </p>
+      <Link className="auth-primary-button" href="/login">
+        Return to login
+      </Link>
     </form>
   );
 }
@@ -159,9 +194,12 @@ export function ResetPasswordForm() {
           type="password"
         />
       </div>
-      <Button className="auth-primary-button" type="button">
-        Continue
-      </Button>
+      <p className="auth-footer-copy" role="status">
+        Password reset is not available yet.
+      </p>
+      <Link className="auth-primary-button" href="/login">
+        Return to login
+      </Link>
     </form>
   );
 }

@@ -10,8 +10,8 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signOut } from "next-auth/react";
 import type { ReactNode } from "react";
+import { logout } from "@/features/auth/lib/logout";
 import { useProfile } from "../hooks/useProfile";
 
 const navigation = [
@@ -49,6 +49,14 @@ export function DashboardShell({
           width={40}
           height={40}
         />
+        <button
+          aria-label="Log out"
+          className="ml-3 inline-flex size-10 items-center justify-center rounded-md border border-[#ff4d4f] text-[#ef4444] transition-colors hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ef4444] lg:hidden"
+          onClick={() => void logout()}
+          type="button"
+        >
+          <LogOut aria-hidden size={20} />
+        </button>
       </header>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[260px] flex-col bg-[#f1f5f9] px-6 py-4 lg:flex">
         <div className="flex h-16 items-center gap-2">
@@ -90,7 +98,7 @@ export function DashboardShell({
           </div>
           <button
             type="button"
-            onClick={() => signOut({ callbackUrl: "/login" })}
+            onClick={() => void logout()}
             className="flex min-h-12 w-full items-center justify-center gap-2 rounded-md border border-[#ff4d4f] text-[#ef4444] transition-colors hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ef4444]"
           >
             <LogOut size={20} aria-hidden />

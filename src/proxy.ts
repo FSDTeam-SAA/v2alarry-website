@@ -6,7 +6,12 @@ export async function proxy(request: NextRequest) {
   const token = await getToken({ req: request });
   const { pathname } = request.nextUrl;
 
-  if (!token && (pathname === "/" || pathname.startsWith("/coaching"))) {
+  if (
+    !token &&
+    (pathname === "/" ||
+      pathname.startsWith("/coaching") ||
+      pathname.startsWith("/dashboard"))
+  ) {
     const callbackUrl = pathname === "/" ? "/coaching/new" : pathname;
     return NextResponse.redirect(
       new URL(

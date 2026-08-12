@@ -2,9 +2,14 @@ import { getSession } from "next-auth/react";
 import { ReadableStream } from "node:stream/web";
 import { TextDecoder, TextEncoder } from "node:util";
 
+import { notifySessionExpired } from "@/features/auth/lib/session-expiry";
+
 import { streamChat } from "./chat.api";
 
 jest.mock("next-auth/react", () => ({ getSession: jest.fn() }));
+jest.mock("@/features/auth/lib/session-expiry", () => ({
+  notifySessionExpired: jest.fn(),
+}));
 
 const mockedGetSession = jest.mocked(getSession);
 
@@ -92,5 +97,22 @@ describe("streamChat", () => {
     ).rejects.toThrow(
       "The chat service is temporarily unavailable. Please try again.",
     );
+  });
+
+  it("opens the shared re-login flow for an unauthorized stream request", async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      json: jest.fn().mockResolvedValue({ detail: "Expired token" }),
+      ok: false,
+      status: 401,
+    } as unknown as Response);
+
+    await expect(
+      streamChat(
+        { message: "Hello", stream: true },
+        { onDone: jest.fn(), onToken: jest.fn() },
+      ),
+    ).rejects.toThrow("Expired token");
+
+    expect(notifySessionExpired).toHaveBeenCalledTimes(1);
   });
 });
