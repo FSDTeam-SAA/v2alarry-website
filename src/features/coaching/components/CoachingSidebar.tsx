@@ -225,7 +225,7 @@ export function CoachingSidebar({
   const closeSearch = useCallback(() => {
     onSearchQueryChange("");
     onToggleSearch();
-    setTimeout(() => searchTriggerRef.current?.focus(), 0);
+    searchTriggerRef.current?.focus();
   }, [onToggleSearch, onSearchQueryChange]);
 
   const handleSearchKeyDown = useCallback(

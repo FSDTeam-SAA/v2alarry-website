@@ -4,11 +4,13 @@ import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { users } from "../dashboard-data";
 import type { User } from "../types";
+import { useUsers } from "../hooks/useUsers";
 import { DataTable } from "./DataTable";
 import { DashboardShell } from "./DashboardShell";
 
 export function UsersPage() {
   const [search, setSearch] = useState("");
+  const { data: userList = users, isLoading } = useUsers();
   const columns = useMemo<ColumnDef<User>[]>(
     () => [
       {
@@ -49,12 +51,18 @@ export function UsersPage() {
           <Search className="text-[#64748b]" size={22} />
         </div>
         <section className="overflow-hidden rounded-xl border border-[#f3f4f6] shadow-sm">
-          <DataTable
-            columns={columns}
-            data={users}
-            search={search}
-            emptyMessage="No matching users."
-          />
+          {isLoading ? (
+            <div className="p-8 text-center" aria-busy="true">
+              Loading users…
+            </div>
+          ) : (
+            <DataTable
+              columns={columns}
+              data={userList}
+              search={search}
+              emptyMessage="No matching users."
+            />
+          )}
         </section>
       </div>
     </DashboardShell>

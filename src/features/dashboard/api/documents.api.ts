@@ -13,6 +13,9 @@ const documentSchema = z.object({
   status: z.string(),
   chunk_count: z.number().int(),
   is_active: z.boolean(),
+  target_user_id: z.number().int().nullable().optional(),
+  target_user_email: z.string().nullable().optional(),
+  is_global: z.boolean().optional(),
 });
 
 const documentStatsSchema = z.object({ total_documents: z.number().int() });
@@ -24,6 +27,8 @@ export type DashboardDocument = {
   category: string;
   uploadedAt: string;
   status: string;
+  targetUserEmail?: string | null;
+  isGlobal?: boolean;
 };
 
 const formatFileSize = (bytes: number | null | undefined) => {
@@ -45,6 +50,8 @@ function toDashboardDocument(
       year: "numeric",
     }).format(new Date(value.uploaded_at)),
     status: value.status,
+    targetUserEmail: value.target_user_email,
+    isGlobal: value.is_global,
   };
 }
 
@@ -62,13 +69,19 @@ export async function getDocumentStats(): Promise<number> {
 
 export async function uploadDocument(input: {
   title: string;
-  category: string;
+  category?: string;
+  user_email?: string;
+  is_global?: boolean;
   file: File;
 }): Promise<void> {
   const formData = new FormData();
   formData.append("file", input.file);
   formData.append("title", input.title);
-  formData.append("category", input.category);
+  if (input.user_email) formData.append("user_email", input.user_email);
+  formData.append(
+    "is_global",
+    input.user_email ? "false" : input.is_global ? "true" : "false",
+  );
   await api.post("/admin/documents/upload", formData);
 }
 

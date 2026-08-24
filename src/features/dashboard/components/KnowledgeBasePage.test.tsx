@@ -34,6 +34,21 @@ jest.mock("../hooks/useProfile", () => ({
     data: { fullName: "Demo Name", role: "admin" },
   }),
 }));
+jest.mock("../hooks/useUsers", () => ({
+  useUsers: () => ({
+    isLoading: false,
+    data: [
+      {
+        id: "1",
+        name: "Test Candidate",
+        email: "candidate@example.com",
+        registeredAt: "Oct 12, 2023",
+        lastActive: "Active",
+        sessions: 5,
+      },
+    ],
+  }),
+}));
 
 describe("KnowledgeBasePage", () => {
   it("opens the upload dialog", () => {
