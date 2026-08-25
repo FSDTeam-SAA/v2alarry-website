@@ -7,7 +7,10 @@ import { z } from "zod";
 
 import { refreshAccessToken } from "@/features/auth/api/refresh-token.api";
 
-const baseUrl = process.env.NEXT_PUBLIC_API_URL;
+const baseUrl =
+  process.env.INTERNAL_API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://127.0.0.1:9100/api/v1";
 
 const backendTokenResponseSchema = z.object({
   access_token: z.string().min(1),

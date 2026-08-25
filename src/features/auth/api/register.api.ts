@@ -9,8 +9,7 @@ export async function registerUser({
   fullName,
   password,
 }: RegisterUserInput): Promise<void> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL;
-  if (!baseUrl) throw new Error("Authentication service is not configured");
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
   const response = await fetch(`${baseUrl}/auth/register`, {
     body: JSON.stringify({

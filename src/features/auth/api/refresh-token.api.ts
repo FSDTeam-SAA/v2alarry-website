@@ -8,7 +8,10 @@ type RefreshResponse = {
 export async function refreshAccessToken(
   refreshToken: string,
 ): Promise<RefreshResponse> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL;
+  const baseUrl =
+    process.env.INTERNAL_API_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    "/api/v1";
   const response = await fetch(`${baseUrl}/auth/refresh`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
