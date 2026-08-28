@@ -2,9 +2,10 @@
 
 import { MoreVertical } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
-import { users } from "../dashboard-data";
+import { useMemo, useState } from "react";
 import type { User } from "../types";
+import { useUsers } from "../hooks/useUsers";
+import { useDocuments, useDocumentStats } from "../hooks/useDocuments";
 import { DataTable } from "./DataTable";
 import { DashboardShell } from "./DashboardShell";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -32,27 +33,52 @@ const columns: ColumnDef<User>[] = [
   { accessorKey: "lastActive", header: "Last active" },
   { accessorKey: "sessions", header: "Sessions" },
 ];
-const activity = [
+
+const thisWeekActivity = [
   15, 15, 26, 26, 18, 18, 36, 36, 21, 21, 29, 29, 21, 21, 36, 36, 18, 18, 24,
+];
+const lastWeekActivity = [
+  10, 14, 18, 22, 16, 20, 28, 25, 19, 24, 22, 26, 18, 20, 30, 28, 15, 16, 20,
 ];
 
 export function DashboardOverview() {
   const [period, setPeriod] = useState<"week" | "last-week">("week");
-  const points = activity
-    .map(
-      (value, index) =>
-        `${(index / (activity.length - 1)) * 100},${100 - value * 2}`,
-    )
-    .join(" ");
+  const { data: userList = [] } = useUsers();
+  const { data: docStats } = useDocumentStats();
+  const { data: documentList = [] } = useDocuments();
+
+  const totalUsers = userList.length;
+  const activeUsers = userList.filter(
+    (u) => u.lastActive !== "Inactive",
+  ).length;
+  const coachingSessions = userList.reduce(
+    (sum, u) => sum + (u.sessions || 0),
+    0,
+  );
+  const totalDocs = docStats ?? documentList.length;
+
+  const currentActivity =
+    period === "week" ? thisWeekActivity : lastWeekActivity;
+  const points = useMemo(
+    () =>
+      currentActivity
+        .map(
+          (value, index) =>
+            `${(index / (currentActivity.length - 1)) * 100},${100 - value * 2}`,
+        )
+        .join(" "),
+    [currentActivity],
+  );
+
   return (
     <DashboardShell title="Dashboard">
       <div className="space-y-4 p-6">
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
-            ["248", "Total Users"],
-            ["126", "Active Users"],
-            ["1,584", "Coaching Sessions"],
-            ["42", "Knowledge Documents"],
+            [totalUsers.toLocaleString(), "Total Users"],
+            [activeUsers.toLocaleString(), "Active Users"],
+            [coachingSessions.toLocaleString(), "Coaching Sessions"],
+            [totalDocs.toLocaleString(), "Knowledge Documents"],
           ].map(([value, label]) => (
             <article
               key={label}
@@ -143,7 +169,7 @@ export function DashboardOverview() {
           </div>
           <DataTable
             columns={columns}
-            data={users.slice(0, 6)}
+            data={userList.slice(0, 6)}
             emptyMessage="No users found."
           />
         </section>
