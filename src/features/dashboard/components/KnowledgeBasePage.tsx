@@ -93,6 +93,7 @@ export function KnowledgeBasePage() {
   const [siteSearch, setSiteSearch] = useState("");
   const [candidateDropdownOpen, setCandidateDropdownOpen] = useState(false);
   const [candidateSearch, setCandidateSearch] = useState("");
+  const [pendingDeletion, setPendingDeletion] = useState<DashboardDocument>();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const documents = useDocuments();
@@ -269,7 +270,7 @@ export function KnowledgeBasePage() {
                       type="button"
                       aria-label={`Delete ${row.original.name}`}
                       disabled={remove.isPending}
-                      onClick={() => void removeDocument(row.original.id)}
+                      onClick={() => setPendingDeletion(row.original)}
                       className="grid size-11 place-items-center rounded-md text-[#ff0033] hover:bg-red-50 disabled:opacity-50"
                     >
                       <Trash2 size={20} />
@@ -313,7 +314,7 @@ export function KnowledgeBasePage() {
             {/* Target Candidate Email with Dropdown and Search */}
             <div className="relative mb-5" ref={dropdownRef}>
               <label className="mb-1.5 block text-sm font-medium text-[#111827]">
-                Target Candidate Email (Optional)
+                Target User Email (Optional)
               </label>
 
               {/* Trigger Input / Dropdown Button */}
@@ -352,7 +353,7 @@ export function KnowledgeBasePage() {
                       <>
                         <Globe size={16} className="text-[#1a73e8]" />
                         <span className="text-[#6a717f]">
-                          🌐 Global (Leave blank for all candidates)
+                          🌐 Global (Leave blank for all users)
                         </span>
                       </>
                     )}
@@ -367,7 +368,7 @@ export function KnowledgeBasePage() {
                           handleSelectCandidate("");
                         }}
                         className="rounded p-1 hover:bg-slate-200 hover:text-black"
-                        title="Clear target candidate"
+                        title="Clear target user"
                       >
                         <X size={14} />
                       </span>
@@ -383,8 +384,8 @@ export function KnowledgeBasePage() {
               </div>
 
               <span className="mt-1 block text-xs text-[#76777d]">
-                If specified, only this candidate will receive responses with
-                this context.
+                If specified, only this user will receive responses with this
+                context.
               </span>
 
               {/* Popover Dropdown Menu */}
@@ -433,7 +434,7 @@ export function KnowledgeBasePage() {
                             Global Context
                           </p>
                           <p className="text-[11px] text-[#6a717f]">
-                            Available to all candidates
+                            Available to all users
                           </p>
                         </div>
                       </div>
@@ -581,6 +582,45 @@ export function KnowledgeBasePage() {
           </form>
         </div>
       )}
+
+      {pendingDeletion ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-document-title"
+            className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+          >
+            <h2 id="delete-document-title" className="text-lg font-semibold">
+              Delete document?
+            </h2>
+            <p className="mt-2 text-sm text-[#6a717f]">
+              This permanently removes {pendingDeletion.name} and its indexed
+              knowledge chunks.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                className="min-h-11 rounded-lg border px-4"
+                onClick={() => setPendingDeletion(undefined)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={remove.isPending}
+                className="min-h-11 rounded-lg bg-red-600 px-4 font-medium text-white disabled:opacity-50"
+                onClick={async () => {
+                  await removeDocument(pendingDeletion.id);
+                  setPendingDeletion(undefined);
+                }}
+              >
+                Delete document
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </DashboardShell>
   );
 }

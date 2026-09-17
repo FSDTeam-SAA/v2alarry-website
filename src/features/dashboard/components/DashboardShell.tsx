@@ -2,12 +2,12 @@
 
 import {
   BookOpenCheck,
+  ClipboardList,
   LayoutDashboard,
   LogOut,
   Settings,
   UsersRound,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -17,6 +17,11 @@ import { useProfile } from "../hooks/useProfile";
 const navigation = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/users", label: "Users", icon: UsersRound },
+  {
+    href: "/dashboard/coaching-summaries",
+    label: "Coaching Summaries",
+    icon: ClipboardList,
+  },
   {
     href: "/dashboard/knowledge-base",
     label: "Knowledge Base",
@@ -34,21 +39,26 @@ export function DashboardShell({
 }) {
   const pathname = usePathname();
   const profile = useProfile();
-  const displayName = profile.data?.fullName ?? "Demo Name";
-  const role = profile.data?.role ?? "Super Admin";
+  const displayName = profile.data?.fullName ?? "Account";
+  const role = profile.data?.role ?? "admin";
+  const initials = displayName
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
   return (
     <div className="min-h-screen bg-white text-[#111827]">
       <header className="fixed inset-x-0 top-0 z-20 flex h-24 items-center bg-[#f1f5f9] px-6 lg:pl-[284px] lg:pr-11">
         <h1 className="text-[22px] font-semibold tracking-tight text-[#023337]">
           {title}
         </h1>
-        <Image
-          className="ml-auto size-10 rounded-full object-cover"
-          src="/images/jane-cooper-avatar.png"
-          alt={displayName}
-          width={40}
-          height={40}
-        />
+        <span
+          aria-label={displayName}
+          className="ml-auto grid size-10 place-items-center rounded-full bg-[#dae2fd] text-xs font-bold"
+        >
+          {initials}
+        </span>
         <button
           aria-label="Log out"
           className="ml-3 inline-flex size-10 items-center justify-center rounded-md border border-[#ff4d4f] text-[#ef4444] transition-colors hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ef4444] lg:hidden"
@@ -84,13 +94,12 @@ export function DashboardShell({
         </nav>
         <div className="mt-auto">
           <div className="mb-6 flex items-center gap-2">
-            <Image
-              className="size-11 rounded-full object-cover"
-              src="/images/jane-cooper-avatar.png"
-              alt=""
-              width={44}
-              height={44}
-            />
+            <span
+              aria-hidden
+              className="grid size-11 place-items-center rounded-full bg-[#dae2fd] text-xs font-bold"
+            >
+              {initials}
+            </span>
             <div>
               <p className="font-semibold">{displayName}</p>
               <p className="text-sm capitalize text-[#6a717f]">{role}</p>

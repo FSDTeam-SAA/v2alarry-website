@@ -8,6 +8,9 @@ const profileSchema = z.object({
   full_name: z.string(),
   role: z.string(),
   is_active: z.boolean(),
+  auth_provider: z.enum(["credentials", "google", "credentials+google"]),
+  password_login_enabled: z.boolean(),
+  accepted_agreement_version: z.string().nullable(),
 });
 
 export type Profile = {
@@ -15,12 +18,18 @@ export type Profile = {
   fullName: string;
   email: string;
   role: string;
+  authProvider: "credentials" | "google" | "credentials+google";
+  passwordLoginEnabled: boolean;
+  acceptedAgreementVersion: string | null;
 };
 const toProfile = (value: z.infer<typeof profileSchema>): Profile => ({
   id: String(value.id),
   fullName: value.full_name,
   email: value.email,
   role: value.role,
+  authProvider: value.auth_provider,
+  passwordLoginEnabled: value.password_login_enabled,
+  acceptedAgreementVersion: value.accepted_agreement_version,
 });
 
 export async function getProfile(): Promise<Profile> {

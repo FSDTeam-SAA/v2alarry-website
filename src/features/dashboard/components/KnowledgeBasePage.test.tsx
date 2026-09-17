@@ -31,7 +31,7 @@ jest.mock("../hooks/useDocuments", () => ({
 }));
 jest.mock("../hooks/useProfile", () => ({
   useProfile: () => ({
-    data: { fullName: "Demo Name", role: "admin" },
+    data: { fullName: "Test Admin", role: "admin" },
   }),
 }));
 jest.mock("../hooks/useUsers", () => ({

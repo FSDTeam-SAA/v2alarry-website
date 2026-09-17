@@ -22,6 +22,7 @@ describe("registerUser", () => {
           email: "member@example.com",
           full_name: "Member Name",
           password: "password123",
+          agreement_version: "leadercoach-pilot-v1",
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",

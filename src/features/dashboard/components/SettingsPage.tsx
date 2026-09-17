@@ -1,7 +1,8 @@
 "use client";
 
 import { Pencil, RefreshCw } from "lucide-react";
-import Image from "next/image";
+import axios from "axios";
+import { signOut, useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -31,6 +32,7 @@ type PasswordValues = z.infer<typeof passwordSchema>;
 
 export function SettingsPage() {
   const [editing, setEditing] = useState(false);
+  const { update: updateSession } = useSession();
   const profile = useProfile();
   const mutations = useProfileMutations();
   const profileForm = useForm<ProfileValues>();
@@ -53,11 +55,19 @@ export function SettingsPage() {
       return;
     }
     try {
-      await mutations.update.mutateAsync(result.data);
+      const updated = await mutations.update.mutateAsync(result.data);
+      await updateSession({ name: updated.fullName, email: updated.email });
       setEditing(false);
       toast.success("Profile updated.");
-    } catch {
-      toast.error("Unable to update profile. The email may already be in use.");
+    } catch (error) {
+      const detail = axios.isAxiosError(error)
+        ? error.response?.data?.detail
+        : undefined;
+      if (detail === "Email is already in use") {
+        profileForm.setError("email", { message: detail });
+      } else {
+        toast.error("Unable to update profile. Please try again.");
+      }
     }
   };
   const savePassword = async (values: PasswordValues) => {
@@ -76,11 +86,18 @@ export function SettingsPage() {
         newPassword: result.data.newPassword,
       });
       passwordForm.reset();
-      toast.success("Password changed.");
-    } catch {
-      toast.error(
-        "Unable to change password. Check your current password and try again.",
-      );
+      await signOut({ callbackUrl: "/login" });
+    } catch (error) {
+      const detail = axios.isAxiosError(error)
+        ? error.response?.data?.detail
+        : undefined;
+      if (detail === "Current password is incorrect") {
+        passwordForm.setError("currentPassword", { message: detail });
+      } else if (typeof detail === "string") {
+        passwordForm.setError("newPassword", { message: detail });
+      } else {
+        toast.error("Unable to change password. Please try again.");
+      }
     }
   };
   return (
@@ -105,13 +122,17 @@ export function SettingsPage() {
         ) : (
           <>
             <section className="flex items-center gap-6 rounded-lg border border-[#dfe3e8] p-5">
-              <Image
-                src="/images/jane-cooper-avatar.png"
-                alt={profile.data?.fullName ?? "Administrator"}
-                width={96}
-                height={96}
-                className="size-24 rounded-full object-cover"
-              />
+              <span
+                aria-hidden
+                className="grid size-24 place-items-center rounded-full bg-[#dae2fd] text-xl font-bold"
+              >
+                {(profile.data?.fullName ?? "A")
+                  .split(" ")
+                  .map((part) => part[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase()}
+              </span>
               <div>
                 <div className="flex items-center gap-2">
                   <p className="font-semibold text-[#153326]">
@@ -188,42 +209,51 @@ export function SettingsPage() {
               <h2 className="mb-7 text-2xl font-semibold text-black">
                 Change password
               </h2>
-              <div className="grid gap-5 lg:grid-cols-3">
-                {(
-                  [
-                    ["currentPassword", "Current Password"],
-                    ["newPassword", "New Password"],
-                    ["confirmPassword", "Confirm New Password"],
-                  ] as const
-                ).map(([key, label]) => (
-                  <label key={key}>
-                    {label}
-                    <input
-                      type="password"
-                      autoComplete={
-                        key === "currentPassword"
-                          ? "current-password"
-                          : "new-password"
-                      }
-                      {...passwordForm.register(key)}
-                      className="mt-2 h-13 w-full rounded-lg border border-[#dfe3e8] bg-[#f7f9fb] px-4"
-                    />
-                    {passwordForm.formState.errors[key] && (
-                      <span className="mt-1 block text-xs text-red-600">
-                        {passwordForm.formState.errors[key]?.message}
-                      </span>
-                    )}
-                  </label>
-                ))}
-              </div>
-              <div className="mt-8 flex justify-end">
-                <button
-                  disabled={mutations.password.isPending}
-                  className="min-h-12 rounded-lg bg-[#f7b626] px-6 font-semibold hover:bg-[#ffc84c] disabled:opacity-50"
-                >
-                  Save Change
-                </button>
-              </div>
+              {!profile.data?.passwordLoginEnabled ? (
+                <p className="rounded-lg bg-[#f7f9fb] p-4 text-sm text-[#5f6d65]">
+                  This Google-only account does not have a local password to
+                  change.
+                </p>
+              ) : (
+                <>
+                  <div className="grid gap-5 lg:grid-cols-3">
+                    {(
+                      [
+                        ["currentPassword", "Current Password"],
+                        ["newPassword", "New Password"],
+                        ["confirmPassword", "Confirm New Password"],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <label key={key}>
+                        {label}
+                        <input
+                          type="password"
+                          autoComplete={
+                            key === "currentPassword"
+                              ? "current-password"
+                              : "new-password"
+                          }
+                          {...passwordForm.register(key)}
+                          className="mt-2 h-13 w-full rounded-lg border border-[#dfe3e8] bg-[#f7f9fb] px-4"
+                        />
+                        {passwordForm.formState.errors[key] && (
+                          <span className="mt-1 block text-xs text-red-600">
+                            {passwordForm.formState.errors[key]?.message}
+                          </span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="mt-8 flex justify-end">
+                    <button
+                      disabled={mutations.password.isPending}
+                      className="min-h-12 rounded-lg bg-[#f7b626] px-6 font-semibold hover:bg-[#ffc84c] disabled:opacity-50"
+                    >
+                      Save Change
+                    </button>
+                  </div>
+                </>
+              )}
             </form>
           </>
         )}

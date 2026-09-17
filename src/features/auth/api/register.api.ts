@@ -4,6 +4,8 @@ type RegisterUserInput = {
   password: string;
 };
 
+import { CURRENT_AGREEMENT_VERSION } from "@/features/terms/agreement";
+
 export async function registerUser({
   email,
   fullName,
@@ -16,6 +18,7 @@ export async function registerUser({
       email,
       full_name: fullName,
       password,
+      agreement_version: CURRENT_AGREEMENT_VERSION,
     }),
     headers: { "Content-Type": "application/json" },
     method: "POST",

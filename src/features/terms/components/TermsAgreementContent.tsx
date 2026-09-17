@@ -115,7 +115,7 @@ export function TermsAgreementContent() {
         </div>
       </section>
 
-      {/* Human Coaching and Supervision */}
+      {/* Administrative Summary Review */}
       <section className="bg-white border border-[#E5E0DA] rounded-xl p-5 md:p-6 shadow-sm hover:border-[#D9D1CB] transition-all">
         <div className="flex items-start gap-3.5">
           <div className="p-2 bg-indigo-500/10 text-indigo-700 rounded-lg shrink-0 mt-0.5">
@@ -123,25 +123,21 @@ export function TermsAgreementContent() {
           </div>
           <div className="space-y-2.5">
             <h2 className="text-base md:text-lg font-semibold text-[#1B1818]">
-              Human Coaching and Supervision
+              Administrative Summary Review
             </h2>
             <p className="text-[#4A4242]">
-              During this pilot, authorized coaching supervision is part of the
-              LeaderCoach experience.
+              During this pilot, authorized LeaderCoach administrators may
+              review structured developmental coaching summaries.
             </p>
             <p className="text-[#4A4242]">
-              Your designated human coach/supervisor—or, when no individual
-              supervisor has been designated, the authorized LeaderCoach
-              administrator—may review your developmental coaching summaries
-              and, when reasonably necessary for coaching quality, continuity,
-              safety, or system improvement, relevant portions of your coaching
-              record.
+              Administrators do not have access to coaching transcripts or
+              message excerpts through the admin dashboard. The summary may
+              include your focus, discoveries, supported developmental themes,
+              commitments, next experiments, and follow-up items.
             </p>
             <p className="text-[#4A4242]">
-              This access is intended to support your development, maintain
-              continuity between AI-supported and human coaching, and help
-              ensure LeaderCoach is functioning as an effective and responsible
-              coaching tool.
+              This summary access is intended to support coaching quality,
+              continuity, safety, and responsible operation of LeaderCoach.
             </p>
             <div className="bg-amber-50/50 border border-amber-200/60 rounded-lg p-3 text-xs md:text-sm text-[#5C5454]">
               <strong>Note:</strong> Your information will not be used to
@@ -192,7 +188,7 @@ export function TermsAgreementContent() {
                 "The nature and purpose of LeaderCoach;",
                 "That you retain responsibility for your decisions and actions;",
                 "That coaching conversations and developmental summaries may be retained to provide continuity;",
-                "That authorized coaching supervision may have access as described above; and",
+                "That authorized administrators may review structured coaching summaries, but not transcripts, through the admin dashboard; and",
                 "The privacy and confidentiality boundaries of the LeaderCoach pilot.",
               ].map((item, idx) => (
                 <li

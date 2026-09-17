@@ -70,6 +70,10 @@ export function SignUpForm() {
   }
 
   async function handleGoogleSignIn() {
+    if (!termsAccepted) {
+      toast.error("Please accept the agreement before continuing with Google.");
+      return;
+    }
     setGoogleError(undefined);
     setIsGoogleSubmitting(true);
 

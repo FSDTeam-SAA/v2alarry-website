@@ -7,34 +7,39 @@ const backendUserSchema = z.object({
   id: z.number().int(),
   email: z.string().email(),
   full_name: z.string().nullable().optional(),
-  role: z.string(),
-  is_active: z.boolean(),
-  created_at: z.string().nullable().optional(),
+  role: z.enum(["admin", "user"]),
+  is_enabled: z.boolean(),
+  registered_at: z.string(),
+  last_coaching_activity: z.string().nullable(),
+  session_count: z.number().int().nonnegative(),
+  summary_count: z.number().int().nonnegative(),
 });
 
 export type BackendUser = z.infer<typeof backendUserSchema>;
 
 export async function getUsers(): Promise<User[]> {
-  try {
-    const response = await api.get("/users/");
-    const parsed = z.array(backendUserSchema).parse(response.data);
+  const response = await api.get("/admin/users");
+  return z.array(backendUserSchema).parse(response.data).map(toDashboardUser);
+}
 
-    return parsed.map((item) => ({
-      id: String(item.id),
-      name: item.full_name || item.email.split("@")[0],
-      email: item.email,
-      registeredAt: item.created_at
-        ? new Intl.DateTimeFormat("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          }).format(new Date(item.created_at))
-        : "Recently",
-      lastActive: item.is_active ? "Active" : "Inactive",
-      sessions: 0,
-    }));
-  } catch (error) {
-    console.error("Failed to fetch users from backend:", error);
-    return [];
-  }
+const dateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
+
+export function toDashboardUser(item: BackendUser): User {
+  return {
+    id: String(item.id),
+    name: item.full_name || item.email.split("@")[0],
+    email: item.email,
+    registeredAt: dateFormatter.format(new Date(item.registered_at)),
+    lastActive: item.last_coaching_activity
+      ? dateFormatter.format(new Date(item.last_coaching_activity))
+      : "Never",
+    sessions: item.session_count,
+    role: item.role,
+    isEnabled: item.is_enabled,
+    summaryCount: item.summary_count,
+  };
 }

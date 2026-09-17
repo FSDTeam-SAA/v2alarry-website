@@ -12,6 +12,7 @@ declare module "next-auth" {
     };
     accessToken: string;
     refreshToken: string;
+    acceptedAgreementVersion: string | null;
     error?: "RefreshAccessTokenError";
   }
 
@@ -24,6 +25,7 @@ declare module "next-auth" {
     token: string;
     refreshToken: string;
     accessTokenExpires: number;
+    acceptedAgreementVersion: string | null;
   }
 }
 
@@ -37,6 +39,7 @@ declare module "next-auth/jwt" {
     accessToken: string;
     refreshToken: string;
     accessTokenExpires: number;
+    acceptedAgreementVersion: string | null;
     error?: "RefreshAccessTokenError";
   }
 }

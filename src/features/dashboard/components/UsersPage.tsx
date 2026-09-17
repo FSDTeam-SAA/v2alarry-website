@@ -1,8 +1,8 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Search } from "lucide-react";
+import { RefreshCw, Search } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
-import { users } from "../dashboard-data";
 import type { User } from "../types";
 import { useUsers } from "../hooks/useUsers";
 import { DataTable } from "./DataTable";
@@ -10,7 +10,8 @@ import { DashboardShell } from "./DashboardShell";
 
 export function UsersPage() {
   const [search, setSearch] = useState("");
-  const { data: userList = users, isLoading } = useUsers();
+  const users = useUsers();
+  const userList = users.data ?? [];
   const columns = useMemo<ColumnDef<User>[]>(
     () => [
       {
@@ -27,9 +28,24 @@ export function UsersPage() {
       { accessorKey: "lastActive", header: "Last active" },
       { accessorKey: "sessions", header: "Sessions" },
       {
+        accessorKey: "isEnabled",
+        header: "Account",
+        cell: ({ row }) => (row.original.isEnabled ? "Enabled" : "Disabled"),
+      },
+      {
         id: "actions",
         header: "Actions",
-        cell: () => <span className="text-[#76777d]">—</span>,
+        cell: ({ row }) =>
+          row.original.summaryCount > 0 ? (
+            <Link
+              className="font-medium text-[#023337] underline-offset-4 hover:underline"
+              href={`/dashboard/coaching-summaries?user=${row.original.id}`}
+            >
+              View summaries ({row.original.summaryCount})
+            </Link>
+          ) : (
+            <span className="text-[#76777d]">No summaries</span>
+          ),
       },
     ],
     [],
@@ -51,9 +67,20 @@ export function UsersPage() {
           <Search className="text-[#64748b]" size={22} />
         </div>
         <section className="overflow-hidden rounded-xl border border-[#f3f4f6] shadow-sm">
-          {isLoading ? (
+          {users.isLoading ? (
             <div className="p-8 text-center" aria-busy="true">
               Loading users…
+            </div>
+          ) : users.isError ? (
+            <div className="p-8 text-center" role="alert">
+              <p className="mb-3 text-[#b42318]">Unable to load users.</p>
+              <button
+                type="button"
+                onClick={() => users.refetch()}
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg border px-4"
+              >
+                <RefreshCw size={16} /> Retry
+              </button>
             </div>
           ) : (
             <DataTable

@@ -21,6 +21,7 @@ const backendTokenResponseSchema = z.object({
     email: z.string().email(),
     full_name: z.string().min(1),
     role: z.string().min(1),
+    accepted_agreement_version: z.string().nullable().optional(),
   }),
 });
 
@@ -79,6 +80,7 @@ function toSessionToken(response: BackendTokenResponse, image: string) {
     accessToken: response.access_token,
     refreshToken: response.refresh_token,
     accessTokenExpires: Date.now() + response.access_token_expires_in * 1000,
+    acceptedAgreementVersion: response.user.accepted_agreement_version ?? null,
   };
 }
 
@@ -133,7 +135,7 @@ const providers: NextAuthOptions["providers"] = [
           if (payload.exp) {
             exp = payload.exp * 1000;
           }
-        } catch (_) {
+        } catch {
           // ignore error decoding jwt
         }
 
@@ -146,6 +148,10 @@ const providers: NextAuthOptions["providers"] = [
           token: data.access_token,
           refreshToken: data.refresh_token || "",
           accessTokenExpires: exp,
+          acceptedAgreementVersion:
+            typeof userData.accepted_agreement_version === "string"
+              ? userData.accepted_agreement_version
+              : null,
         };
       } catch (error) {
         if (error instanceof Error) {
@@ -200,11 +206,23 @@ const authOptions: NextAuthOptions = {
           accessToken: user.token,
           refreshToken: user.refreshToken,
           accessTokenExpires: user.accessTokenExpires,
+          acceptedAgreementVersion: user.acceptedAgreementVersion,
         };
       }
 
       if (trigger === "update" && session) {
-        return { ...token, ...session.user };
+        const updates = session as unknown as {
+          name?: string;
+          email?: string;
+          acceptedAgreementVersion?: string;
+        };
+        return {
+          ...token,
+          name: updates.name ?? token.name,
+          email: updates.email ?? token.email,
+          acceptedAgreementVersion:
+            updates.acceptedAgreementVersion ?? token.acceptedAgreementVersion,
+        };
       }
 
       if (
@@ -243,6 +261,7 @@ const authOptions: NextAuthOptions = {
       };
       session.accessToken = token.accessToken;
       session.refreshToken = token.refreshToken;
+      session.acceptedAgreementVersion = token.acceptedAgreementVersion ?? null;
       session.error = token.error;
       return session;
     },

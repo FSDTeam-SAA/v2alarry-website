@@ -77,7 +77,8 @@ export async function uploadDocument(input: {
   const formData = new FormData();
   formData.append("file", input.file);
   formData.append("title", input.title);
-  if (input.user_email) formData.append("user_email", input.user_email);
+  formData.append("category", input.category || "General");
+  if (input.user_email) formData.append("target_user_email", input.user_email);
   formData.append(
     "is_global",
     input.user_email ? "false" : input.is_global ? "true" : "false",
