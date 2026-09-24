@@ -1,5 +1,5 @@
 import { AuthShell } from "@/features/auth/components/AuthShell";
-import { OtpForm } from "@/features/auth/components/AuthStaticForms";
+import { OtpForm } from "@/features/auth/components/PasswordRecoveryForms";
 
 export default function VerifyOtpPage() {
   return (

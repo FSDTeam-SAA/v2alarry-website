@@ -1,27 +1,40 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { type FormEvent, useState } from "react";
+import { CheckCircle2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  clearLoginSuccessToast,
+  navigateToAuthenticatedDestination,
+  recordLoginSuccessToast,
+} from "@/features/auth/lib/login-success";
 
 import { AuthField } from "./AuthFields";
 
 export function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string>();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+
+  function getCallbackUrl() {
+    const callbackUrl = searchParams.get("callbackUrl");
+    return callbackUrl?.startsWith("/") && !callbackUrl.startsWith("//")
+      ? callbackUrl
+      : "/";
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
-    const callbackUrl = searchParams.get("callbackUrl") ?? "/";
+    const callbackUrl = getCallbackUrl();
 
     setError(undefined);
     setIsSubmitting(true);
@@ -36,7 +49,12 @@ export function LoginForm() {
     setIsSubmitting(false);
 
     if (response?.ok) {
-      router.push(callbackUrl);
+      recordLoginSuccessToast();
+      setIsSuccess(true);
+      window.setTimeout(
+        () => navigateToAuthenticatedDestination(callbackUrl),
+        200,
+      );
       return;
     }
 
@@ -45,13 +63,15 @@ export function LoginForm() {
   }
 
   async function handleGoogleSignIn() {
-    const callbackUrl = searchParams.get("callbackUrl") ?? "/";
+    const callbackUrl = getCallbackUrl();
 
     setError(undefined);
     setIsGoogleSubmitting(true);
+    recordLoginSuccessToast();
 
     const response = await signIn("google", { callbackUrl, redirect: true });
     if (response?.error) {
+      clearLoginSuccessToast();
       const message = "Unable to start Google sign-in. Please try again.";
       setError(message);
       setIsGoogleSubmitting(false);
@@ -59,53 +79,67 @@ export function LoginForm() {
   }
 
   return (
-    <form className="auth-form" onSubmit={handleSubmit}>
-      <h1>Welcome Back</h1>
-      <div className="auth-fields">
-        <AuthField
-          autoComplete="email"
-          id="email"
-          label="Email"
-          name="email"
-          placeholder="Your email address"
-          type="email"
-        />
-        <AuthField
-          autoComplete="current-password"
-          id="password"
-          label="Password"
-          name="password"
-          placeholder="Your password"
-          type="password"
-        />
-      </div>
-      {error ? (
-        <p className="auth-error" role="alert">
-          {error}
+    <form
+      aria-busy={isSuccess || isSubmitting || isGoogleSubmitting}
+      className="auth-form auth-login-form"
+      data-auth-state={isSuccess ? "success" : "idle"}
+      onSubmit={handleSubmit}
+    >
+      <div aria-hidden={isSuccess} className="auth-login-content">
+        <h1>Welcome Back</h1>
+        <div className="auth-fields">
+          <AuthField
+            autoComplete="email"
+            id="email"
+            label="Email"
+            name="email"
+            placeholder="Your email address"
+            type="email"
+          />
+          <AuthField
+            autoComplete="current-password"
+            id="password"
+            label="Password"
+            name="password"
+            placeholder="Your password"
+            type="password"
+          />
+        </div>
+        <p className="auth-forgot-password py-5 hover:underline">
+          <Link href="/forgot-password">Forgot password?</Link>
         </p>
-      ) : null}
-      <Button
-        className="auth-primary-button"
-        disabled={isSubmitting || isGoogleSubmitting}
-        type="submit"
-      >
-        {isSubmitting ? "Logging in…" : "Log in"}
-      </Button>
-      <AuthDivider label="Or login with" />
-      <Button
-        className="auth-primary-button"
-        disabled={isSubmitting || isGoogleSubmitting}
-        onClick={handleGoogleSignIn}
-        type="button"
-      >
-        <span aria-hidden="true" className="auth-google-mark">
-          G
-        </span>
-        {isGoogleSubmitting ? "Connecting to Google…" : "Sign in with Google"}
-      </Button>
-      <p className="auth-footer-copy">
-        Don&apos;t have an account? <Link href="/signup">Sign up</Link>
-      </p>
+        {error ? (
+          <p className="auth-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <Button
+          className="auth-primary-button"
+          disabled={isSubmitting || isGoogleSubmitting || isSuccess}
+          type="submit"
+        >
+          {isSubmitting ? "Logging in…" : "Log in"}
+        </Button>
+        <AuthDivider label="Or login with" />
+        <Button
+          className="auth-primary-button"
+          disabled={isSubmitting || isGoogleSubmitting || isSuccess}
+          onClick={handleGoogleSignIn}
+          type="button"
+        >
+          <span aria-hidden="true" className="auth-google-mark">
+            G
+          </span>
+          {isGoogleSubmitting ? "Connecting to Google…" : "Sign in with Google"}
+        </Button>
+        <p className="auth-footer-copy">
+          Don&apos;t have an account? <Link href="/signup">Sign up</Link>
+        </p>
+      </div>
+      <div className="auth-login-success" role="status">
+        <CheckCircle2 aria-hidden size={28} />
+        <span>Welcome back</span>
+      </div>
     </form>
   );
 }
