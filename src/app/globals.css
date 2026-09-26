@@ -1206,7 +1206,8 @@
     .coaching-panel:not(.coaching-panel-conversation) {
       overflow-y: auto;
     }
-    .coaching-panel:not(.coaching-panel-conversation) .coaching-composer-section {
+    .coaching-panel:not(.coaching-panel-conversation)
+      .coaching-composer-section {
       align-self: start;
       padding-top: 1.5rem;
       padding-bottom: 1rem;

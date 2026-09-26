@@ -14,6 +14,7 @@ import {
 } from "@/features/auth/lib/login-success";
 
 import { AuthField } from "./AuthFields";
+import Image from "next/image";
 
 export function LoginForm() {
   const searchParams = useSearchParams();
@@ -86,7 +87,7 @@ export function LoginForm() {
       onSubmit={handleSubmit}
     >
       <div aria-hidden={isSuccess} className="auth-login-content">
-        <h1>Welcome Back</h1>
+        <h1 className="md:text-5xl">Welcome Back</h1>
         <div className="auth-fields">
           <AuthField
             autoComplete="email"
@@ -122,17 +123,23 @@ export function LoginForm() {
         </Button>
         <AuthDivider label="Or login with" />
         <Button
-          className="auth-primary-button"
+          className="bg-primary/10 text-accent-foreground hover:bg-accent/80 dark:bg-accent/30 dark:text-accent-foreground/80 dark:hover:bg-accent/50 border dark:border-input flex *:items-center justify-center gap-2 w-full"
           disabled={isSubmitting || isGoogleSubmitting || isSuccess}
           onClick={handleGoogleSignIn}
           type="button"
         >
           <span aria-hidden="true" className="auth-google-mark">
-            G
+            <Image
+              src="/images/google.jpg"
+              alt="Login with Google"
+              width={18}
+              height={18}
+              className="auth-google-mark"
+            />
           </span>
           {isGoogleSubmitting ? "Connecting to Google…" : "Sign in with Google"}
         </Button>
-        <p className="auth-footer-copy">
+        <p className="auth-footer-copy mt-4">
           Don&apos;t have an account? <Link href="/signup">Sign up</Link>
         </p>
       </div>
@@ -146,7 +153,7 @@ export function LoginForm() {
 
 export function AuthDivider({ label }: { label: string }) {
   return (
-    <div className="auth-divider" aria-hidden="true">
+    <div className="auth-divider py-4" aria-hidden="true">
       <span />
       <p>{label}</p>
       <span />
