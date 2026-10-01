@@ -14,7 +14,7 @@ jest.mock("next/server", () => ({
 }));
 
 const request = (path: string) => {
-  const url = `https://leadercoach.test${path}`;
+  const url = `https://lab.v2a.com${path}`;
   return { nextUrl: new URL(url), url } as unknown as NextRequest;
 };
 
@@ -44,7 +44,7 @@ describe("proxy authorization", () => {
     jest.mocked(getToken).mockResolvedValue(sessionToken("user", null));
     const response = await proxy(request("/coaching/new"));
     expect(response.headers.get("location")).toBe(
-      "https://leadercoach.test/agreement",
+      "https://lab.v2a.com/agreement",
     );
   });
 
@@ -54,7 +54,7 @@ describe("proxy authorization", () => {
       .mockResolvedValue(sessionToken("user", "leadercoach-pilot-v1"));
     const response = await proxy(request("/dashboard"));
     expect(response.headers.get("location")).toBe(
-      "https://leadercoach.test/coaching/new",
+      "https://lab.v2a.com/coaching/new",
     );
   });
 
