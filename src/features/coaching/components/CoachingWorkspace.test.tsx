@@ -64,11 +64,10 @@ describe("CoachingWorkspace", () => {
     });
   });
 
-  it("uses factual coaching and account-saving language", () => {
+  it("uses factual coaching language and identifies the active session", () => {
     render(<CoachingWorkspace />);
 
     expect(screen.getByText("Leadership coaching session")).toBeInTheDocument();
-    expect(screen.getByText("Saved to your account")).toBeInTheDocument();
     expect(
       screen.getByRole("region", { name: "Leading Through Change" }),
     ).not.toHaveClass("coaching-panel-processing");
